@@ -6,7 +6,23 @@ const { WebpackPlugin } = require('@electron-forge/plugin-webpack');
 
 /** @type {import('@electron-forge/shared-types').ForgeConfig} */
 module.exports = {
-  packagerConfig: { asar: true },
+  /* ----------------------------------------------------------- */
+  /*  Packager: bundle wrapper.py + library/ into resources/     */
+  /* ----------------------------------------------------------- */
+  packagerConfig: {
+    asar: false,                           // keep loose files
+    extraFiles: [
+      {
+        from: path.resolve(__dirname, '..', 'wrapper.py'),
+        to: 'wrapper.py',
+      },
+      {
+        from: path.resolve(__dirname, '..', 'library'),
+        to: 'library',
+      },
+    ],
+  },
+
   rebuildConfig: {},
 
   makers: [
