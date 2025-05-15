@@ -1,34 +1,37 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { spawn } from 'child_process';
 import path from 'path';
+import fs from 'fs';
 
-// Forge‐injected constants
+// Forge‑injected constants
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 
 /* ------------------------------------------------------------------ */
-/* IPC bridge – run wrapper.py wherever the app lives                 */
+/* IPC bridge – run wrapper.py from packaged app or repo root         */
 /* ------------------------------------------------------------------ */
-function findWrapper(): string {
-  // 1) next to compiled code  →  resources/app/wrapper.py
-  const local = path.resolve(__dirname, '../wrapper.py');
-  // 2) dev / repo root        →  ../../../../wrapper.py
-  const repo  = path.resolve(__dirname, '../../../../wrapper.py');
-  return require('fs').existsSync(local) ? local : repo;
+function locateWrapper(): string {
+  // 1) When packaged → resources/wrapper.py
+  const packaged = path.join(process.resourcesPath, 'wrapper.py');
+
+  // 2) Dev mode → <repo>/wrapper.py  (three dirs up from .webpack/main)
+  const dev = path.resolve(__dirname, '../../../../wrapper.py');
+
+  return fs.existsSync(packaged) ? packaged : dev;
 }
 
 ipcMain.handle('run-goal', async (_e, goal: string): Promise<string> => {
-  const wrapper = findWrapper();
+  const wrapper = locateWrapper();
   const cwd = path.dirname(wrapper);
 
   return new Promise((resolve, reject) => {
     const child = spawn('python', [wrapper, goal], { cwd });
 
-    let output = '';
-    child.stdout.on('data', d => (output += d.toString()));
-    child.stderr.on('data', d => (output += d.toString()));
+    let out = '';
+    child.stdout.on('data', d => (out += d.toString()));
+    child.stderr.on('data', d => (out += d.toString()));
     child.on('close', code =>
-      code === 0 ? resolve(output) : reject(output),
+      code === 0 ? resolve(out) : reject(out),
     );
   });
 });
@@ -48,7 +51,6 @@ const createWindow = () => {
 };
 
 if (require('electron-squirrel-startup')) app.quit();
-
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
