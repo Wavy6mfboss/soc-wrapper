@@ -2,10 +2,10 @@ import path from 'path';
 import { Configuration } from 'webpack';
 
 const config: Configuration = {
-  /**  ✅  MAIN PROCESS ENTRY POINT  */
+  /* ─── Main‑process entry file ──────────────────────────────── */
   entry: './src/index.ts',
 
-  /**  Output bundle goes into the build dir Forge sets up */
+  /* ─── Bundle destination (Forge copies this for packaging) ── */
   output: {
     filename: 'main.js',
     path: path.resolve(__dirname, 'dist'),
@@ -19,7 +19,10 @@ const config: Configuration = {
       {
         test: /\.ts$/,
         exclude: /node_modules/,
-        use: 'ts-loader',
+        use: {
+          loader: 'ts-loader',
+          options: { transpileOnly: true }, // ⚡ skip type‑checking
+        },
       },
     ],
   },
