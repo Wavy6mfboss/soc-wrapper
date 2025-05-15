@@ -7,18 +7,18 @@ const { WebpackPlugin } = require('@electron-forge/plugin-webpack');
 /** @type {import('@electron-forge/shared-types').ForgeConfig} */
 module.exports = {
   /* ----------------------------------------------------------- */
-  /*  Packager: bundle wrapper.py + library/ into resources/     */
+  /*  Packager: include wrapper.py + library/ inside app folder  */
   /* ----------------------------------------------------------- */
   packagerConfig: {
-    asar: false,                           // keep loose files
+    asar: false,
     extraFiles: [
       {
         from: path.resolve(__dirname, '..', 'wrapper.py'),
-        to: 'wrapper.py',
+        to: path.join('app', 'wrapper.py'),
       },
       {
         from: path.resolve(__dirname, '..', 'library'),
-        to: 'library',
+        to: path.join('app', 'library'),
       },
     ],
   },
