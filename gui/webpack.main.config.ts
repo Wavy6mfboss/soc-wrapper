@@ -7,9 +7,9 @@ const config: Configuration = {
 
   /* ─── Bundle destination (Forge copies this for packaging) ── */
   output: {
-    filename: 'main.js',
-    path: path.resolve(__dirname, 'dist'),
-  },
+  filename: 'index.js',                          // ← must be index.js
+  path: path.resolve(__dirname, '.webpack/main') // ← where Forge looks
+},
 
   target: 'electron-main',
   mode: process.env.NODE_ENV === 'production' ? 'production' : 'development',
