@@ -2,26 +2,27 @@ import type { Configuration } from 'webpack';
 import { rules } from './webpack.rules';
 import { plugins } from './webpack.plugins';
 
-/* Add CSS handling */
+/* CSS */
 rules.push({
   test: /\.css$/,
   use: [{ loader: 'style-loader' }, { loader: 'css-loader' }],
 });
 
-/* Replace the existing TS rule (if any) with one that skips type‑check */
+/* TS (skip type‑check) */
 rules.push({
   test: /\.ts$/,
   exclude: /node_modules/,
   use: {
     loader: 'ts-loader',
-    options: { transpileOnly: true }, // ⚡ skip type‑checking
+    options: { transpileOnly: true },
   },
 });
 
-export const rendererConfig: Configuration = {
+/* ─── Final renderer config ─── */
+const config: Configuration = {
   module: { rules },
   plugins,
-  resolve: {
-    extensions: ['.js', '.ts', '.jsx', '.tsx', '.css'],
-  },
+  resolve: { extensions: ['.js', '.ts', '.jsx', '.tsx', '.css'] },
 };
+
+export default config;     // 👈 default export, no extra wrapper
