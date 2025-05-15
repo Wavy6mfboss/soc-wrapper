@@ -1,25 +1,22 @@
-// ─── Enable TypeScript configs ──────────────────────────────────
-import 'ts-node/register';
+// Enable TypeScript configs
+require('ts-node').register({ transpileOnly: true });
 
-import type { ForgeConfig } from '@electron-forge/shared-types';
-import { WebpackPlugin } from '@electron-forge/plugin-webpack';
-import path from 'path';
+const path = require('path');
+const { WebpackPlugin } = require('@electron-forge/plugin-webpack');
 
-const config: ForgeConfig = {
+/** @type {import('@electron-forge/shared-types').ForgeConfig} */
+module.exports = {
   packagerConfig: { asar: true },
   rebuildConfig: {},
 
-  // ---------- Makers ----------
   makers: [
     { name: '@electron-forge/maker-squirrel', config: {} },
     { name: '@electron-forge/maker-zip', platforms: ['darwin'], config: {} },
     { name: '@electron-forge/maker-dmg', config: {} },
   ],
 
-  // ---------- Webpack ----------
   plugins: [
     new WebpackPlugin({
-      // pass *paths* to the TS configs
       mainConfig: path.join(__dirname, 'webpack.main.config.ts'),
       renderer: {
         config: path.join(__dirname, 'webpack.renderer.config.ts'),
@@ -35,5 +32,3 @@ const config: ForgeConfig = {
     }),
   ],
 };
-
-export default config;
