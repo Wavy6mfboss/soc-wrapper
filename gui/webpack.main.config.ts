@@ -3,7 +3,7 @@ import { Configuration } from 'webpack';
 
 const config: Configuration = {
   /**  ✅  MAIN PROCESS ENTRY POINT  */
-  entry: './src/main.ts',
+  entry: './src/index.ts',
 
   /**  Output bundle goes into the build dir Forge sets up */
   output: {
