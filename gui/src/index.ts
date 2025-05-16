@@ -8,21 +8,17 @@ declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 
 /* ------------------------------------------------------------------ */
-/* IPC bridge – run wrapper.py wherever the app lives                 */
+/* IPC bridge – run wrapper.py in packaged or dev mode                */
 /* ------------------------------------------------------------------ */
 function locateWrapper(): string {
-  const inResourcesApp  = path.join(process.resourcesPath, 'app', 'wrapper.py');
-  const inResourcesRoot = path.join(process.resourcesPath,       'wrapper.py');
-  const inRepo          = path.resolve(__dirname, '../../../../wrapper.py');
-
-  if (fs.existsSync(inResourcesApp))  return inResourcesApp;
-  if (fs.existsSync(inResourcesRoot)) return inResourcesRoot;
-  return inRepo; // dev mode
+  const inApp = path.join(app.getAppPath(), 'wrapper.py');               // resources/app/
+  const dev   = path.resolve(__dirname, '../../../../wrapper.py');       // repo root
+  return fs.existsSync(inApp) ? inApp : dev;
 }
 
 ipcMain.handle('run-goal', async (_e, goal: string): Promise<string> => {
   const wrapper = locateWrapper();
-  const cwd = path.dirname(wrapper);
+  const cwd     = path.dirname(wrapper);
 
   return new Promise((resolve, reject) => {
     const child = spawn('python', [wrapper, goal], { cwd });
