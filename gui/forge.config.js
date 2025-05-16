@@ -1,4 +1,3 @@
-// Enable TypeScript configs at build time
 require('ts-node').register({ transpileOnly: true });
 
 const path = require('path');
@@ -6,19 +5,16 @@ const { WebpackPlugin } = require('@electron-forge/plugin-webpack');
 
 /** @type {import('@electron-forge/shared-types').ForgeConfig} */
 module.exports = {
-  /* ----------------------------------------------------------- */
-  /*  Packager: include wrapper.py + library/ under resources/   */
-  /* ----------------------------------------------------------- */
   packagerConfig: {
     asar: false,
     extraFiles: [
       {
         from: path.resolve(__dirname, '..', 'wrapper.py'),
-        to: 'wrapper.py',          // → resources/wrapper.py
+        to: path.join('app', 'wrapper.py'),   // → …\resources\app\wrapper.py
       },
       {
         from: path.resolve(__dirname, '..', 'library'),
-        to: 'library',             // → resources/library/…
+        to: path.join('app', 'library'),      // → …\resources\app\library\…
       },
     ],
   },
