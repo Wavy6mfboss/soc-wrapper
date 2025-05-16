@@ -11,14 +11,8 @@ module.exports = {
   packagerConfig: {
     asar: false,
     extraResource: [
-      {
-        from: path.resolve(__dirname, '..', 'wrapper.py'),
-        to: 'wrapper.py',          // → resources/wrapper.py
-      },
-      {
-        from: path.resolve(__dirname, '..', 'library'),
-        to: 'library',             // → resources/library/…
-      },
+      path.resolve(__dirname, '..', 'wrapper.py'),   // → resources/wrapper.py
+      path.resolve(__dirname, '..', 'library'),      // → resources/library/…
     ],
   },
 
