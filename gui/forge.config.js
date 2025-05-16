@@ -5,14 +5,15 @@ const { WebpackPlugin } = require('@electron-forge/plugin-webpack');
 
 /** @type {import('@electron-forge/shared-types').ForgeConfig} */
 module.exports = {
-  /* ----------------------------------------------------------- */
-  /*  Packager: copy wrapper.py + library/ into resources/       */
-  /* ----------------------------------------------------------- */
+  /* ---------------------------------------------------------------- */
+  /* Packager: include frozen CLI (bin/), library/, and wrapper.py    */
+  /* ---------------------------------------------------------------- */
   packagerConfig: {
     asar: false,
     extraResource: [
-      path.resolve(__dirname, '..', 'wrapper.py'),   // → resources/wrapper.py
-      path.resolve(__dirname, '..', 'library'),      // → resources/library/…
+      path.resolve(__dirname, '..', 'bin'),        // → resources/bin/operate_runner.exe
+      path.resolve(__dirname, '..', 'library'),    // → resources/library/…
+      path.resolve(__dirname, '..', 'wrapper.py'), // (optional: for fallback or debugging)
     ],
   },
 

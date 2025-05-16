@@ -3,29 +3,27 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 
-// Forge‑injected constants
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 
-/* ------------------------------------------------------------------ */
-/* IPC bridge – run wrapper.py (packaged or dev)                      */
-/* ------------------------------------------------------------------ */
-function locateWrapper(): string {
-  // Packaged: ...\resources\wrapper.py
-  const inResources = path.join(process.resourcesPath, 'wrapper.py');
+/* ───────────────────────────────────────────────────────────── */
+/* IPC: Call frozen operate_runner.exe or fallback to Python     */
+/* ───────────────────────────────────────────────────────────── */
+function buildCommand(goal: string): { cmd: string; args: string[]; cwd: string } {
+  const inResources = path.join(process.resourcesPath, 'bin', 'operate_runner.exe');
+  const fallbackDev = path.resolve(__dirname, '../../../dist/operate_runner.exe');
 
-  // Dev: ...\soc-wrapper\wrapper.py (3 levels up from .webpack/main)
-  const dev = path.resolve(__dirname, '../../../wrapper.py');
+  const exe = fs.existsSync(inResources) ? inResources : fallbackDev;
+  const cwd = path.dirname(exe);
 
-  return fs.existsSync(inResources) ? inResources : dev;
+  return { cmd: exe, args: [goal], cwd };
 }
 
 ipcMain.handle('run-goal', async (_e, goal: string): Promise<string> => {
-  const wrapper = locateWrapper();
-  const cwd     = path.dirname(wrapper);
+  const { cmd, args, cwd } = buildCommand(goal);
 
   return new Promise((resolve, reject) => {
-    const child = spawn('python', [wrapper, goal], { cwd });
+    const child = spawn(cmd, args, { cwd });
 
     let out = '';
     child.stdout.on('data', d => (out += d.toString()));
@@ -36,9 +34,9 @@ ipcMain.handle('run-goal', async (_e, goal: string): Promise<string> => {
   });
 });
 
-/* ------------------------------------------------------------------ */
-/* Main‑window boilerplate                                            */
-/* ------------------------------------------------------------------ */
+/* ───────────────────────────────────────────────────────────── */
+/* Window Boilerplate                                            */
+/* ───────────────────────────────────────────────────────────── */
 let win: BrowserWindow | null = null;
 
 const createWindow = () => {
