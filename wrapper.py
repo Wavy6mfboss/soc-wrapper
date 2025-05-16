@@ -1,53 +1,39 @@
-#!/usr/bin/env python3
-"""
-Call the Self‑Operating Computer tool and save its JSON plan.
-Usage: python wrapper.py "open google.com"
-"""
-import argparse
+import sys
+import os
 import subprocess
 from datetime import datetime
-from pathlib import Path
-import shutil
-import sys
 
-ROOT_DIR = Path(__file__).parent           # .../soc-wrapper or resources/
-LIB_DIR  = ROOT_DIR / "library"
-LIB_DIR.mkdir(exist_ok=True)
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: wrapper.py \"<goal>\"")
+        sys.exit(1)
 
-def build_operate_cmd(goal: str) -> list[str]:
-    """Return a command list that invokes the SOC CLI in any environment."""
-    # 1) try the venv's operate.exe
-    exe = ROOT_DIR / ".venv" / "Scripts" / "operate.exe"
-    if exe.exists():
-        return [str(exe), "--prompt", goal]
+    goal = sys.argv[1]
 
-    # 2) if 'operate' is on PATH
-    if shutil.which("operate"):
-        return ["operate", "--prompt", goal]
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    bin_path = os.path.join(base_dir, "bin", "operate_runner.exe")
+    library_dir = os.path.join(base_dir, "library")
+    os.makedirs(library_dir, exist_ok=True)
 
-    # 3) fall back: python -m operate
-    return [sys.executable, "-m", "operate", "--prompt", goal]
+    plan_file = datetime.now().isoformat(timespec="seconds").replace(":", "-") + ".json"
+    out_file = os.path.join(library_dir, plan_file)
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Get SOC plan for a goal")
-    parser.add_argument("goal", nargs="+", help="Your objective")
-    args = parser.parse_args()
-    goal_txt = " ".join(args.goal)
+    try:
+        proc = subprocess.run(
+            [bin_path, "--prompt", goal],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        with open(out_file, "w", encoding="utf-8") as f:
+            f.write(proc.stdout)
 
-    cmd = build_operate_cmd(goal_txt)
+        print(f"Plan saved to {out_file}")
 
-    proc = subprocess.run(
-        cmd,
-        text=True,
-        capture_output=True,
-        check=True,
-    )
-    plan = proc.stdout.strip()
-
-    stamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-    out_file = LIB_DIR / f"{stamp}.json"
-    out_file.write_text(plan)
-    print(f"Plan saved to {out_file}")
+    except subprocess.CalledProcessError as e:
+        print("Error:", e, file=sys.stderr)
+        print(e.stderr, file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
