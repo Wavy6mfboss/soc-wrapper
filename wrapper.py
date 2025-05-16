@@ -7,20 +7,26 @@ import argparse
 import subprocess
 from datetime import datetime
 from pathlib import Path
-import sys
 import shutil
+import sys
 
-ROOT_DIR = Path(__file__).parent           # .../soc-wrapper
+ROOT_DIR = Path(__file__).parent           # .../soc-wrapper or resources/
 LIB_DIR  = ROOT_DIR / "library"
 LIB_DIR.mkdir(exist_ok=True)
 
-def find_operate_cli() -> str:
-    """
-    Return the absolute path to .venv/Scripts/operate.exe if it exists,
-    otherwise just 'operate' (hoping it's on the PATH).
-    """
-    venv_cli = ROOT_DIR / ".venv" / "Scripts" / "operate.exe"
-    return str(venv_cli) if venv_cli.exists() else "operate"
+def build_operate_cmd(goal: str) -> list[str]:
+    """Return a command list that invokes the SOC CLI in any environment."""
+    # 1) try the venv's operate.exe
+    exe = ROOT_DIR / ".venv" / "Scripts" / "operate.exe"
+    if exe.exists():
+        return [str(exe), "--prompt", goal]
+
+    # 2) if 'operate' is on PATH
+    if shutil.which("operate"):
+        return ["operate", "--prompt", goal]
+
+    # 3) fall back: python -m operate
+    return [sys.executable, "-m", "operate", "--prompt", goal]
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Get SOC plan for a goal")
@@ -28,14 +34,10 @@ def main() -> None:
     args = parser.parse_args()
     goal_txt = " ".join(args.goal)
 
-    operate_cmd = [find_operate_cli(), "--prompt", goal_txt]
-
-    # On Windows, CreateProcess needs the .exe to exist
-    if not shutil.which(operate_cmd[0]):
-        sys.exit(f"ERROR: cannot find {operate_cmd[0]}")
+    cmd = build_operate_cmd(goal_txt)
 
     proc = subprocess.run(
-        operate_cmd,
+        cmd,
         text=True,
         capture_output=True,
         check=True,
