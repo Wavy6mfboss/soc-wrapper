@@ -10,7 +10,7 @@ module.exports = {
   /* ----------------------------------------------------------- */
   packagerConfig: {
     asar: false,
-    extraFiles: [
+    extraResource: [
       {
         from: path.resolve(__dirname, '..', 'wrapper.py'),
         to: 'wrapper.py',          // → resources/wrapper.py
