@@ -10,8 +10,8 @@ def main():
 
     goal = sys.argv[1]
 
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    bin_path = os.path.join(base_dir, "bin", "operate_runner.exe")
+    base_dir = os.path.dirname(os.path.abspath(__file__))  # ← this is the 'resources/' folder
+    exe_path = os.path.join(base_dir, "bin", "operate_runner.exe")
     library_dir = os.path.join(base_dir, "library")
     os.makedirs(library_dir, exist_ok=True)
 
@@ -19,8 +19,11 @@ def main():
     out_file = os.path.join(library_dir, plan_file)
 
     try:
+        if not os.path.exists(exe_path):
+            raise FileNotFoundError(f"🚨 Missing binary: {exe_path}")
+
         proc = subprocess.run(
-            [bin_path, "--prompt", goal],
+            [exe_path, "--prompt", goal],
             capture_output=True,
             text=True,
             check=True,
@@ -28,11 +31,15 @@ def main():
         with open(out_file, "w", encoding="utf-8") as f:
             f.write(proc.stdout)
 
-        print(f"Plan saved to {out_file}")
+        print(f"✅ Plan saved to {out_file}")
 
     except subprocess.CalledProcessError as e:
-        print("Error:", e, file=sys.stderr)
+        print("❌ Error:", e, file=sys.stderr)
         print(e.stderr, file=sys.stderr)
+        sys.exit(1)
+
+    except FileNotFoundError as fe:
+        print(str(fe), file=sys.stderr)
         sys.exit(1)
 
 if __name__ == "__main__":
