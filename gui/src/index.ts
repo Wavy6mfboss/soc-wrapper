@@ -11,11 +11,11 @@ declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 /* IPC bridge – run wrapper.py (packaged or dev)                      */
 /* ------------------------------------------------------------------ */
 function locateWrapper(): string {
-  // Packaged: %LOCALAPPDATA%\gui\app‑X.Y.Z\resources\wrapper.py
+  // Packaged →  …\resources\wrapper.py
   const inResources = path.join(process.resourcesPath, 'wrapper.py');
 
-  // Dev: <repo>/wrapper.py  (three dirs up from .webpack/main)
-  const dev = path.resolve(__dirname, '../../../../wrapper.py');
+  // Dev      →  …\soc-wrapper\wrapper.py  (two levels up from .webpack/main)
+  const dev = path.resolve(__dirname, '../../wrapper.py');
 
   return fs.existsSync(inResources) ? inResources : dev;
 }
