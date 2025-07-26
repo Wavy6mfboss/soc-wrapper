@@ -18,3 +18,27 @@ pybuild/
 *.lib
 *.pyd
 *.pkg
+
+# build / binary artifacts
+/dist/
+/build/
+/gui/dist/
+/pybuild/
+*.exe
+*.dll
+*.lib
+*.pyd
+*.pkg
+
+
+# build / binary artifacts
+/dist/
+/build/
+/gui/dist/
+/pybuild/
+*.exe
+*.dll
+*.lib
+*.pyd
+*.pkg
+
