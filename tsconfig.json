@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    /* ---------- modern output ---------- */
+    "target": "es2020",
+    "module": "esnext",
+    "lib": ["dom", "es2020"],
+
+    /* ---------- React / JSX ---------- */
+    "jsx": "react-jsx",
+
+    /* ---------- resolution ---------- */
+    "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["gui/src/*"],
+      "~/*": ["gui/src/*"]
+    },
+
+    /* ---------- ergonomics ---------- */
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+
+    /* ---------- safety ---------- */
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* ---------- tests ---------- */
+    "types": ["jest", "node"]
+  },
+
+  "include": [
+    "gui/**/*",
+    "gui/tests/**/*",
+    "scripts/**/*"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules"
+  ]
+}

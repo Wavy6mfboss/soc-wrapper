@@ -1,44 +1,36 @@
-/**
- * marketplace.test.ts
- * -------------------
- * Mocks window.electron.templateAPI so the renderer-side
- * marketplace stubs work in a Node test environment.
- */
+/* ---------------------------------------------------------------- *\
+   Marketplace integration test
+   Publishes one row → immediately fetches it back
+\* ---------------------------------------------------------------- */
 
-/* ---------- lightweight in-memory store ---------- */
-const memory: any[] = [];
-
-(global as any).window = {
-  electron: {
-    templateAPI: {
-      publishTemplate: async (t: any) => {
-        memory.push(t);
-      },
-      fetchPublicTemplates: async () => memory
-    }
-  }
-};
-
-/* ---------- now import the module under test ---------- */
+import type { TemplateJSON }     from '@/services/templates';
 import {
   publishTemplate,
-  fetchPublicTemplates
-} from "../src/services/marketplace";
+  fetchPublicTemplates,
+}                                from '@/services/marketplace';
 
-/* ---------- demo payload ---------- */
-const demo = {
-  title: "Unit-Test Template",
-  prompt: "echo test",
-  instructions: "",
-  tags: [],
-  price_cents: 0,
-  version: "1.0.0",
-  is_public: false
-};
+describe('Marketplace – publish + fetch round-trip', () => {
+  it('inserts row and it shows up in list', async () => {
+    /* ---- unique row so parallel CI runs never collide ---- */
+    const now = Date.now();
+    const tpl: TemplateJSON = {
+      title        : `jest-tpl ${now}`,
+      prompt       : 'say hi',
+      instructions : '',
+      tags         : ['jest'],
+      price_cents  : 0,
+      /**  ⚠️  Supabase column `version` is still INTEGER,
+           so keep it a numeric string the DB can cast.       */
+      version      : '1',
+      is_public    : true,
+    };
 
-test("publish + fetch round-trip", async () => {
-  await publishTemplate(demo);
-  const list = await fetchPublicTemplates();
-  const found = list.find(t => t.title === demo.title);
-  expect(found?.prompt).toBe("echo test");
+    /* ---- publish ---- */
+    const { error } = await publishTemplate(tpl);
+    expect(error).toBeNull();
+
+    /* ---- fetch list ---- */
+    const list = await fetchPublicTemplates();
+    expect(list.find(t => t.title === tpl.title)).toBeTruthy();
+  });
 });
