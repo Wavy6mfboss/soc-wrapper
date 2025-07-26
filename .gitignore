@@ -2,3 +2,19 @@
 __pycache__/
 library/*.json
 node_modules
+# build / installer artifacts
+dist/
+build/
+bin/
+gui/dist/
+
+# PyInstaller + venv leftovers
+pybuild/
+*.spec
+
+# compiled binaries
+*.exe
+*.dll
+*.lib
+*.pyd
+*.pkg
