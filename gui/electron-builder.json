@@ -1,0 +1,24 @@
+{
+  "appId": "com.socwrapper.gui",
+  "productName": "SOC-Wrapper GUI",
+  "asar": true,
+  "directories": {
+    "output": "dist"
+  },
+  "files": [
+    "dist/**/*",
+    "electron-main.cjs",
+    "preload.cjs",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "dist/operate_runner.exe",
+      "to": "operate_runner.exe"
+    }
+  ],
+  "win": {
+    "target": "nsis",
+    "artifactName": "SOC-Wrapper-${version}.exe"
+  }
+}

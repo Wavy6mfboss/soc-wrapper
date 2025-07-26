@@ -1,0 +1,28 @@
+/* very small placeholder stylesheet — Vite just needs the file to exist  */
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+}
+
+main.container {
+  padding: 2rem;
+}
+
+.run-btn {
+  padding: 0.4rem 1rem;
+  margin-right: 0.5rem;
+  cursor: pointer;
+}
+
+.run-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.runs-left {
+  font-size: 0.9rem;
+}
+
+.status {
+  margin-top: 1.5rem;
+}

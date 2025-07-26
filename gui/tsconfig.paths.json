@@ -1,0 +1,10 @@
+{
+  // picked up automatically by vite-tsconfig-paths
+  "compilerOptions": {
+    "baseUrl": ".",          /* ↳ project root of gui/ */
+    "paths": {
+      "@/*":  ["src/*"],
+      "~/*":  ["src/*"]
+    }
+  }
+}

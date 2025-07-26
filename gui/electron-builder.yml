@@ -1,0 +1,24 @@
+# ─────────────────────────────────────────────────────────
+#  Electron-builder config for SOC-Wrapper GUI
+# ─────────────────────────────────────────────────────────
+appId: com.socwrapper.gui
+productName: SOC-Wrapper GUI
+asar: true
+
+files:
+  - dist/**
+  - electron-main.cjs
+  - preload.cjs
+
+extraResources:
+  - from: ../dist/operate_runner.exe
+    to: operate_runner.exe
+
+directories:
+  output: dist
+  buildResources: build      # add icon.ico later if desired
+
+nsis:
+  oneClick: true             # silent upgrade, no wizard
+  allowElevation: true
+  runAfterFinish: true       # launch after install

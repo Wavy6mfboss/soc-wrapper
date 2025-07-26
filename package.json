@@ -1,0 +1,43 @@
+{
+  "name": "soc-wrapper-gui",
+  "version": "0.0.5-dev",
+  "description": "SOC-Wrapper desktop client",
+  "author": "Alexander Salamanca",
+  "main": "gui/electron-main.cjs",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev:renderer": "vite gui --port 5180 --strictPort",
+    "dev:electron": "wait-on http://localhost:5180 && cross-env VITE_DEV_SERVER_URL=http://localhost:5180 electron gui/electron-main.cjs",
+    "build": "vite build --root gui",
+    "package": "electron-builder --win --x64 --config electron-builder.yml",
+    "test": "jest",
+    "purge-dev-templates": "node scripts/purge-templates.js"
+  },
+  "dependencies": {
+    "@stripe/stripe-js": "^2.0.0",
+    "@supabase/supabase-js": "^2.50.2",
+    "electron-store": "8.1.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@vitejs/plugin-react": "^4.6.0",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^29.3.0",
+    "electron-builder": "^26.0.12",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.0",
+    "typescript": "^5.5.0",
+    "vite": "^5.4.19",
+    "wait-on": "^7.0.1"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "roots": [
+      "<rootDir>/gui/tests"
+    ]
+  }
+}
