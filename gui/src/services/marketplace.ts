@@ -1,5 +1,5 @@
 /* ───────────────────────── gui/src/services/marketplace.ts
-   Public Marketplace helpers – Sprint-10 (fixed insert schema)
+   Public Marketplace helpers – Sprint-10 (coerce version → int)
 ────────────────────────────────────────────────────────────────── */
 
 import { supabase, type TemplateJSON } from './templates'
@@ -12,8 +12,14 @@ export type MarketplaceTemplate = TemplateJSON & {
 }
 
 /* ---------- utils ------------------------------------------------------- */
+function coerceVersion (v: any): number {
+  if (typeof v === 'number') return v || 1
+  const first = String(v ?? '1').split('.')[0]     // '1.0.0' → '1'
+  const n     = parseInt(first, 10)
+  return Number.isFinite(n) && n > 0 ? n : 1
+}
+
 function toDbRow (tpl: TemplateJSON) {
-  /* keep only columns that actually exist on public.templates */
   const {
     title,
     prompt,
@@ -22,35 +28,26 @@ function toDbRow (tpl: TemplateJSON) {
     price_cents,
     version,
   } = tpl
+
   return {
     title,
     prompt,
     instructions,
     tags,
-    price_cents,
-    version,
+    price_cents: 0,            // free
+    version: coerceVersion(version),
     is_public: true,
-    price_cents: 0,
   }
 }
 
 /* ---------- API --------------------------------------------------------- */
-
-/** Publish a template publicly (price = 0 ¢). */
 export async function publishTemplate (
   tpl: TemplateJSON,
 ): Promise<{ error: Error | null }> {
-  const { error } = await supabase
-    .from('templates')
-    .insert([toDbRow(tpl)])
+  const { error } = await supabase.from('templates').insert([toDbRow(tpl)])
   return { error }
 }
 
-/**
- * Fetch free public templates + rating stats.
- * sort: 'new' (default) → newest first
- *       'top'           → highest ★ first
- */
 export async function fetchPublicTemplates (
   sort: 'new' | 'top' = 'new',
 ): Promise<MarketplaceTemplate[]> {
@@ -65,10 +62,10 @@ export async function fetchPublicTemplates (
     return []
   }
 
-  const rows = data ?? []
-  const stats = await fetchRatingStats(rows.map(t => t.id!))
+  const rows  = data ?? []
+  const stats = await fetchRatingStats(rows.map((t) => t.id!))
 
-  const enriched: MarketplaceTemplate[] = rows.map(t => ({
+  const enriched: MarketplaceTemplate[] = rows.map((t) => ({
     ...t,
     avgStars:    stats[t.id!]?.avg   ?? 0,
     ratingCount: stats[t.id!]?.count ?? 0,
