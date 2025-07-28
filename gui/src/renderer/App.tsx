@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Home           from "./Home";
 import Library        from "./Library";
 import TemplateEditor from "./TemplateEditor";
+import Marketplace    from "./Marketplace";           /* ★ new */
 import { ErrorBoundary } from "./ErrorBoundary";
 import { TemplateJSON }  from "../services/templates";
 
@@ -17,6 +18,7 @@ const queryClient = new QueryClient();
 type Page =
   | { view: "home" }
   | { view: "library" }
+  | { view: "marketplace" }                         /* ★ new */
   | { view: "editor"; editing: TemplateJSON | null };
 
 /* ---------------------------------------------------- UI */
@@ -39,7 +41,6 @@ export default function App() {
     /* exited */
     const unsubExit = window.electron.onCliExited(() => setRunning(false));
 
-    /* cleanup */
     return () => {
       unsubStart();
       unsubExit();
@@ -86,9 +87,15 @@ export default function App() {
             </a>
             <a
               onClick={() => setPage({ view: "library" })}
-              style={{ cursor: "pointer" }}
+              style={{ marginRight: 16, cursor: "pointer" }}
             >
               Library
+            </a>
+            <a
+              onClick={() => setPage({ view: "marketplace" })}
+              style={{ cursor: "pointer" }}
+            >
+              Marketplace
             </a>
           </nav>
 
@@ -101,6 +108,8 @@ export default function App() {
               onEdit={(tpl) => setPage({ view: "editor", editing: tpl })}
             />
           )}
+
+          {page.view === "marketplace" && <Marketplace />}
 
           {page.view === "editor" && (
             <TemplateEditor
