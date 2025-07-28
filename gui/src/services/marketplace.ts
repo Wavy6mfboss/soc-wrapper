@@ -1,46 +1,31 @@
 /* ───────────────────────── gui/src/services/marketplace.ts
-   Public-template helpers  (Sprint-10)
+   Public Marketplace helpers – Sprint-10
+   (now re-uses the supabase singleton from templates.ts)
 ────────────────────────────────────────────────────────────────── */
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { TemplateJSON } from '@/services/templates'
-import { fetchRatingStats } from './ratings'   // ★ new
 
-/* ---------- env ---------------------------------------------------------- */
-const nEnv = (typeof process !== 'undefined' ? process.env : {}) as any
-const wEnv = (typeof window  !== 'undefined' ? (window as any).ENV : {}) ?? {}
+import { supabase, type TemplateJSON } from './templates'   // ★ reuse client
+import { fetchRatingStats } from './ratings'
 
-const SUPABASE_URL  = nEnv.VITE_SUPABASE_URL      || wEnv.VITE_SUPABASE_URL
-const SUPABASE_ANON = nEnv.VITE_SUPABASE_ANON_KEY || wEnv.VITE_SUPABASE_ANON_KEY
-
-if (!SUPABASE_URL || !SUPABASE_ANON) {
-  throw new Error('[marketplace] Missing VITE_SUPABASE_* env vars')
-}
-
-/* ---------- singleton client --------------------------------------------- */
-export const supabase: SupabaseClient =
-  (globalThis as any).__SOC_WRAPPER_SBP__ ||
-  ((globalThis as any).__SOC_WRAPPER_SBP__ = createClient(SUPABASE_URL, SUPABASE_ANON))
-
-/* ---------- types --------------------------------------------------------- */
+/* ---------- types ------------------------------------------------------- */
 export type MarketplaceTemplate = TemplateJSON & {
   avgStars:    number
   ratingCount: number
 }
 
-/* ---------- API ----------------------------------------------------------- */
+/* ---------- API --------------------------------------------------------- */
 
-/** Owner publishes a template to *public*, price = 0 ¢. */
+/** Owner publishes a template publicly (price = 0 ¢). */
 export async function publishTemplate (
   tpl: TemplateJSON,
 ): Promise<{ error: Error | null }> {
   const { error } = await supabase
     .from('templates')
-    .insert([{ ...tpl, is_public: true }])
+    .insert([{ ...tpl, is_public: true, price_cents: 0 }])
   return { error }
 }
 
 /**
- * Free public templates + rating stats.
+ * Fetch free public templates + rating stats.
  * sort: 'new' (default) → newest first
  *       'top'           → highest ★ first
  */
@@ -60,22 +45,24 @@ export async function fetchPublicTemplates (
 
   const rows = data ?? []
 
-  /* ---- attach rating averages ------------------------------------------ */
-  const stats = await fetchRatingStats(rows.map(t => t.id))
+  /* attach rating averages */
+  const stats = await fetchRatingStats(rows.map(t => t.id!))
   const enriched: MarketplaceTemplate[] = rows.map(t => ({
     ...t,
-    avgStars:    stats[t.id]?.avg   ?? 0,
-    ratingCount: stats[t.id]?.count ?? 0,
+    avgStars:    stats[t.id!]?.avg   ?? 0,
+    ratingCount: stats[t.id!]?.count ?? 0,
   }))
 
-  /* ---- sort client-side ------------------------------------------------- */
+  /* sort client-side */
   if (sort === 'new') {
-    enriched.sort((a, b) =>
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    enriched.sort(
+      (a, b) =>
+        new Date(b.created_at ?? '').getTime() -
+        new Date(a.created_at ?? '').getTime(),
     )
   } else {
-    enriched.sort((a, b) =>
-      b.avgStars - a.avgStars || b.ratingCount - a.ratingCount,
+    enriched.sort(
+      (a, b) => b.avgStars - a.avgStars || b.ratingCount - a.ratingCount,
     )
   }
 
