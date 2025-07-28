@@ -1,9 +1,8 @@
 /* ───────────────────────── gui/src/services/marketplace.ts
-   Public Marketplace helpers – Sprint-10
-   (now re-uses the supabase singleton from templates.ts)
+   Public Marketplace helpers – Sprint-10 (fixed insert schema)
 ────────────────────────────────────────────────────────────────── */
 
-import { supabase, type TemplateJSON } from './templates'   // ★ reuse client
+import { supabase, type TemplateJSON } from './templates'
 import { fetchRatingStats } from './ratings'
 
 /* ---------- types ------------------------------------------------------- */
@@ -12,15 +11,38 @@ export type MarketplaceTemplate = TemplateJSON & {
   ratingCount: number
 }
 
+/* ---------- utils ------------------------------------------------------- */
+function toDbRow (tpl: TemplateJSON) {
+  /* keep only columns that actually exist on public.templates */
+  const {
+    title,
+    prompt,
+    instructions,
+    tags,
+    price_cents,
+    version,
+  } = tpl
+  return {
+    title,
+    prompt,
+    instructions,
+    tags,
+    price_cents,
+    version,
+    is_public: true,
+    price_cents: 0,
+  }
+}
+
 /* ---------- API --------------------------------------------------------- */
 
-/** Owner publishes a template publicly (price = 0 ¢). */
+/** Publish a template publicly (price = 0 ¢). */
 export async function publishTemplate (
   tpl: TemplateJSON,
 ): Promise<{ error: Error | null }> {
   const { error } = await supabase
     .from('templates')
-    .insert([{ ...tpl, is_public: true, price_cents: 0 }])
+    .insert([toDbRow(tpl)])
   return { error }
 }
 
@@ -44,9 +66,8 @@ export async function fetchPublicTemplates (
   }
 
   const rows = data ?? []
-
-  /* attach rating averages */
   const stats = await fetchRatingStats(rows.map(t => t.id!))
+
   const enriched: MarketplaceTemplate[] = rows.map(t => ({
     ...t,
     avgStars:    stats[t.id!]?.avg   ?? 0,
