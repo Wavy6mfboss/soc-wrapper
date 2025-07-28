@@ -1,46 +1,49 @@
 /* ───────────────────────── renderer/Library.tsx
-   Lists local + community templates with Run / Edit / Delete
+   Lists local + community templates with Run / Edit / Delete / Publish
 ────────────────────────────────────────────────────────────────── */
 
-import React        from "react";
-import { useQuery } from "@tanstack/react-query";
+import React, { useState } from "react"
+import { useQuery }        from "@tanstack/react-query"
 import {
   fetchTemplates,
   deleteTemplate,
   TemplateJSON,
-} from "../services/templates";
+} from "@/services/templates"
+import PublishDialog from "./PublishDialog"
 
 /* ---------------------------------------------------------------- types */
 interface Props {
-  onRun : (tpl: TemplateJSON) => void;          // now **required**
-  onEdit: (tpl: TemplateJSON | null) => void;   // required – enables “Edit”
+  onRun : (tpl: TemplateJSON) => void
+  onEdit: (tpl: TemplateJSON | null) => void
 }
 
 /* ---------------------------------------------------------------- component */
-export default function Library({ onRun, onEdit }: Props) {
+export default function Library ({ onRun, onEdit }: Props) {
   const {
     data: templates = [],
     isLoading,
     refetch,
-  } = useQuery({ queryKey: ["templates"], queryFn: fetchTemplates });
+  } = useQuery({ queryKey: ["templates"], queryFn: fetchTemplates })
 
-  const locals    = templates.filter((t) => !t.is_public);
-  const community = templates.filter((t) =>  t.is_public);
+  const locals    = templates.filter((t) => !t.is_public)
+  const community = templates.filter((t) =>  t.is_public)
 
-  async function handleDelete(tpl: TemplateJSON) {
-    await deleteTemplate(tpl);
-    void refetch();
+  const [toPublish, setToPublish] = useState<TemplateJSON | null>(null)
+
+  async function handleDelete (tpl: TemplateJSON) {
+    await deleteTemplate(tpl)
+    void refetch()
   }
 
   /* money formatter */
   const price = (cents: number) =>
-    cents ? `$${(cents / 100).toFixed(2)}` : "Free";
+    cents ? `$${(cents / 100).toFixed(2)}` : "Free"
 
   /* reusable section */
-  function Section(
+  function Section (
     title: string,
     rows : TemplateJSON[],
-    showCrud: boolean,     // Edit/Delete?
+    showCrud: boolean,   // Edit/Delete/Publish?
   ) {
     return (
       <>
@@ -68,7 +71,8 @@ export default function Library({ onRun, onEdit }: Props) {
                     {showCrud && (
                       <>
                         <button onClick={() => onEdit(t)}>Edit</button>{" "}
-                        <button onClick={() => handleDelete(t)}>Delete</button>
+                        <button onClick={() => handleDelete(t)}>Delete</button>{" "}
+                        <button onClick={() => setToPublish(t)}>Publish</button>
                       </>
                     )}
                   </td>
@@ -78,10 +82,10 @@ export default function Library({ onRun, onEdit }: Props) {
           </table>
         )}
       </>
-    );
+    )
   }
 
-  if (isLoading) return <p>Loading templates…</p>;
+  if (isLoading) return <p>Loading templates…</p>
 
   return (
     <div style={{ maxWidth: 900, paddingBottom: 48 }}>
@@ -94,6 +98,17 @@ export default function Library({ onRun, onEdit }: Props) {
       {Section("My Automations", locals, true)}
       <hr style={{ margin: "40px 0" }} />
       {Section("Community", community, false)}
+
+      {/* Publish modal */}
+      {toPublish && (
+        <PublishDialog
+          tpl={toPublish}
+          onClose={(published) => {
+            setToPublish(null)
+            if (published) void refetch()
+          }}
+        />
+      )}
     </div>
-  );
+  )
 }
