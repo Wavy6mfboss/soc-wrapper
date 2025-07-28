@@ -1,19 +1,20 @@
-// gui/src/services/ratings.ts
-// ★ Ratings API helpers – Sprint-10
+/* ───────────────────────── gui/src/services/ratings.ts
+   Ratings API helpers – Sprint-10
+────────────────────────────────────────────────────────────────── */
 
-import { supabase } from '../supabaseClient'   // ← adjust path if needed
+import { supabase } from './templates'   // ← re-use existing singleton
 
 export type RatingStats = { avg: number; count: number }
 
 /**
- * Submit (or overwrite) a rating.
+ * Submit a rating (1-5 stars, optional comment).
  * Supabase RLS allows anonymous INSERT.
  */
-export async function submitRating(
+export async function submitRating (
   templateId: number,
   stars: number,
-  comment: string = ''
-) {
+  comment: string = '',
+): Promise<void> {
   const { error } = await supabase.from('ratings').insert({
     template_id: templateId,
     stars,
@@ -23,11 +24,10 @@ export async function submitRating(
 }
 
 /**
- * Fetch avg ★ and count for a list of template IDs.
- * Returns a map: { [templateId]: { avg, count } }
+ * Return { [templateId]: { avg, count } } for the supplied IDs.
  */
-export async function fetchRatingStats(
-  templateIds: number[]
+export async function fetchRatingStats (
+  templateIds: number[],
 ): Promise<Record<number, RatingStats>> {
   if (!templateIds.length) return {}
 
