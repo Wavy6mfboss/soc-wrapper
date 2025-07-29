@@ -1,72 +1,91 @@
-/* ───────────────────────── renderer/Library.tsx */
-import React, { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import {
-  fetchTemplates, deleteTemplate, TemplateJSON, supabase,
-} from '@/services/templates'
-import PublishDialog from './PublishDialog'
-import RatingPrompt  from './RatingPrompt'
+/* ──────────── gui/src/services/templates.ts
+   Local + Supabase CRUD helpers (compile-safe)
+────────────────────────────────────────────────────────── */
+import { createClient } from '@supabase/supabase-js'
 
-interface Props{
-  onRun :(tpl:TemplateJSON)=>void
-  onEdit:(tpl:TemplateJSON|null)=>void   // navigates to separate editor page
+/* env ------------------------------------------------------------------- */
+const env = (k: string) =>
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.[k]) ??
+  (typeof process    !== 'undefined' && process.env[k]) ??
+  (typeof window     !== 'undefined' && (window as any).ENV?.[k])
+
+const URL  = env('VITE_SUPABASE_URL')
+const ANON = env('VITE_SUPABASE_ANON_KEY')
+if (!URL || !ANON) throw new Error('Missing VITE_SUPABASE_* env vars')
+
+export const supabase = createClient(URL, ANON)
+
+/* ---------- types ------------------------------------------------------ */
+export interface TemplateJSON {
+  id?: string               // uuid (remote) or local string id
+  title: string
+  prompt: string
+  instructions: string
+  tags: string[]
+  price_cents: number
+  version: number | string
+  is_public: boolean
+  owner_id?: string | null
+  source_id?: string | null
+  created_at?: string
 }
 
-const KEY='soc-wrapper-run-counts-v1'
-const bump=id=>{const m=JSON.parse(localStorage.getItem(KEY)??'{}');m[id]=(m[id]??0)+1;localStorage.setItem(KEY,JSON.stringify(m));return m[id]}
-const clear=id=>{const m=JSON.parse(localStorage.getItem(KEY)??'{}');delete m[id];localStorage.setItem(KEY,JSON.stringify(m))}
-const ALLOW_SELF=import.meta.env.ALLOW_SELF_RATING==='true'
+/* ---------- local helpers ---------------------------------------------- */
+const LOCAL_KEY = 'soc-wrapper-templates-v1'
+const locals = (): TemplateJSON[] => {
+  try { return JSON.parse(localStorage.getItem(LOCAL_KEY) ?? '[]') }
+  catch { return [] }
+}
+const writeLocals = (arr: TemplateJSON[]) =>
+  localStorage.setItem(LOCAL_KEY, JSON.stringify(arr))
 
-export default function Library({onRun,onEdit}:Props){
-  const{data:list=[],isLoading,refetch}=useQuery({queryKey:['templates'],queryFn:fetchTemplates})
-  const[uid,setUid]=useState<string|null|undefined>(undefined)
-  useEffect(()=>{supabase.auth.getUser().then(r=>setUid(r.data.user?.id??null))},[])
+function saveLocal (tpl: TemplateJSON) {
+  tpl.id ??= Date.now().toString()
+  const list = locals()
+  const idx  = list.findIndex(x => x.id === tpl.id)
+  idx >= 0 ? (list[idx] = tpl) : list.push(tpl)
+  writeLocals(list)
+}
 
-  const mine = uid===undefined?[]:list.filter(t=>t.owner_id==uid||t.owner_id==null)
-  const created  = mine.filter(t=>!t.source_id)
-  const downloads= mine.filter(t=> t.source_id)
-
-  const[pub ,setPub ]=useState<TemplateJSON|null>(null)
-  const[rate,setRate]=useState<string|null>(null)
-
-  async function run(t:TemplateJSON){
-    await onRun(t)
-    const orig=t.source_id??t.id!
-    const self=t.source_id==null&&(t.owner_id==uid||t.owner_id==null)
-    if(self&&!ALLOW_SELF) return
-    if(bump(orig)>=2) setRate(orig)
+/* ---------- public API -------------------------------------------------- */
+export async function saveTemplate (tpl: TemplateJSON) {
+  if (tpl.id && tpl.id.length === 36) {
+    /* remote row – update */
+    await supabase
+      .from('templates')
+      .update({
+        title: tpl.title,
+        prompt: tpl.prompt,
+        instructions: tpl.instructions,
+        tags: tpl.tags,
+        price_cents: tpl.price_cents,
+        version: tpl.version,
+      })
+      .eq('id', tpl.id)
+  } else {
+    saveLocal(tpl)
   }
-  async function del(t:TemplateJSON){ await deleteTemplate(t); await refetch() }
-
-  const price=(c:number)=>c?`$${(c/100).toFixed(2)}`:'Free'
-  const badge=(s:string)=><span style={{background:'#eee',fontSize:11,padding:'2px 6px',borderRadius:4,marginRight:6,textTransform:'uppercase'}}>{s}</span>
-  const Row=(t:TemplateJSON,lbl:string)=>(<tr key={t.id}>
-    <td>{badge(lbl)}{t.title}</td><td>{t.tags.join(', ')}</td><td>{price(t.price_cents)}</td>
-    <td>
-      <button onClick={()=>run(t)}>Run</button>{' '}
-      <button onClick={()=>onEdit(t)}>Edit</button>{' '}
-      <button onClick={()=>del(t)}>Delete</button>{' '}
-      {lbl==='created'&&<button onClick={()=>setPub(t)}>Publish</button>}
-    </td>
-  </tr>)
-
-  if(isLoading||uid===undefined) return<p>Loading…</p>
-
-  return(<div style={{maxWidth:900}}>
-    <h1>My Library</h1>
-    <button onClick={()=>onEdit(null)} style={{margin:'16px 0'}}>+ New Template</button>
-
-    <h3>Created</h3>
-    <table style={{borderSpacing:8}}><thead><tr><th>Title</th><th>Tags</th><th>Price</th><th/></tr></thead>
-      <tbody>{created.map(t=>Row(t,'created'))}</tbody></table>
-
-    {downloads.length>0&&<>
-      <hr style={{margin:'32px 0'}}/><h3>Downloads & Purchases</h3>
-      <table style={{borderSpacing:8}}><thead><tr><th>Title</th><th>Tags</th><th>Price</th><th/></tr></thead>
-        <tbody>{downloads.map(t=>Row(t,t.price_cents?'purchased':'downloaded'))}</tbody></table>
-    </>}
-
-    {pub &&<PublishDialog tpl={pub} onClose={()=>{setPub(null);refetch()}}/>}
-    {rate&&<RatingPrompt templateId={rate} onClose={()=>{clear(rate);setRate(null)}}/>}
-  </div>)
 }
+
+export async function deleteTemplate (tpl: TemplateJSON) {
+  if (tpl.id && tpl.id.length === 36) {
+    await supabase.from('templates').delete().eq('id', tpl.id)
+  }
+  writeLocals(locals().filter(t => t.id !== tpl.id))
+}
+
+export async function fetchTemplates () {
+  const [local, remote] = await Promise.all([
+    Promise.resolve(locals()),
+    supabase.from('templates').select('*').then(r => r.data ?? []),
+  ])
+
+  /* de-dup by id (prefer remote) */
+  const map = new Map<string, TemplateJSON>()
+  remote.forEach(r => map.set(String(r.id), r))
+  local.forEach(l => { if (!map.has(String(l.id))) map.set(String(l.id), l) })
+  return Array.from(map.values())
+}
+
+/* aliases */
+export const createTemplate = saveTemplate
