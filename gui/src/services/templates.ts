@@ -1,5 +1,5 @@
 /* ──────────── gui/src/services/templates.ts
-   Local + Supabase CRUD helpers (edit-sync fixed)
+   Local + Supabase CRUD helpers (edit persist fixed)
 ────────────────────────────────────────────────────────── */
 import { createClient } from '@supabase/supabase-js'
 
@@ -43,35 +43,44 @@ function upsertLocal (tpl: TemplateJSON) {
   tpl.id ??= Date.now().toString()
   const list = locals()
   const i = list.findIndex(x => x.id === tpl.id)
-  i >= 0 ? (list[i] = tpl) : list.push(tpl)
+  if (i >= 0) list[i] = tpl
+  else list.push(tpl)
   writeLocals(list)
 }
 
 /* ---------- save / update ---------------------------------------------- */
 export async function saveTemplate (tpl: TemplateJSON) {
   if (tpl.id && tpl.id.length === 36) {
-    /* remote row → update */
-    await supabase
+    // Update remote row
+    const { error } = await supabase
       .from('templates')
       .update({
-        title: tpl.title,
-        prompt: tpl.prompt,
+        title:        tpl.title,
+        prompt:       tpl.prompt,
         instructions: tpl.instructions,
-        tags: tpl.tags,
-        price_cents: tpl.price_cents,
-        version: tpl.version,
+        tags:         tpl.tags,
+        price_cents:  tpl.price_cents,
+        version:      tpl.version,
       })
       .eq('id', tpl.id)
-      .catch(() => {})
+    if (error) {
+      console.error('[templates] update error →', error)
+    }
   }
-  /* always make the local copy match the latest state */
+  // Sync local copy
   upsertLocal(tpl)
 }
 
 /* ---------- delete ------------------------------------------------------ */
 export async function deleteTemplate (tpl: TemplateJSON) {
   if (tpl.id && tpl.id.length === 36) {
-    await supabase.from('templates').delete().eq('id', tpl.id)
+    const { error } = await supabase
+      .from('templates')
+      .delete()
+      .eq('id', tpl.id)
+    if (error) {
+      console.error('[templates] delete error →', error)
+    }
   }
   writeLocals(
     locals().filter(t => t.id !== tpl.id && t.source_id !== tpl.id),
@@ -86,8 +95,8 @@ export async function fetchTemplates () {
   ])
 
   const map = new Map<string, TemplateJSON>()
-  remote.forEach(r => map.set(String(r.id), r))  /* remote first */
-  local .forEach(l => map.set(String(l.id), l))  /* local overrides */
+  remote.forEach(r => map.set(String(r.id), r))  // remote first
+  local .forEach(l => map.set(String(l.id), l))  // local overrides
   return Array.from(map.values())
 }
 
