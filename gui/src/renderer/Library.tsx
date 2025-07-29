@@ -1,145 +1,147 @@
 /* ───────────────────────── renderer/Library.tsx
-   Lists templates, handles Run / Edit / Delete / Publish / Rate
+   My Library – badges, self-rating guard, publish & run
 ──────────────────────────────────────────────────────────────── */
-import React, { useState } from "react"
-import { useQuery }        from "@tanstack/react-query"
+
+import React, { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   fetchTemplates,
   deleteTemplate,
   TemplateJSON,
-} from "@/services/templates"
-import PublishDialog from "./PublishDialog"
-import RatingPrompt  from "./RatingPrompt"
+  supabase,
+} from '@/services/templates'
+import PublishDialog from './PublishDialog'
+import RatingPrompt  from './RatingPrompt'
 
-/* ---------------------------------------------------------------- types */
 interface Props {
   onRun : (tpl: TemplateJSON) => void
   onEdit: (tpl: TemplateJSON | null) => void
 }
 
-/* ---------------------------------------------------------------- constants */
-const RUN_COUNT_KEY = "soc-wrapper-run-counts-v1" // { [tplId]: number }
-
-/* ---------------------------------------------------------------- helpers */
-function incRunCount (id: number) {
-  const map = JSON.parse(localStorage.getItem(RUN_COUNT_KEY) ?? "{}")
-  map[id] = (map[id] ?? 0) + 1
-  localStorage.setItem(RUN_COUNT_KEY, JSON.stringify(map))
-  return map[id]
+/* run-count storage */
+const RUN_KEY = 'soc-wrapper-run-counts-v1'
+function bumpRun (id: number) {
+  const m = JSON.parse(localStorage.getItem(RUN_KEY) ?? '{}')
+  m[id] = (m[id] ?? 0) + 1
+  localStorage.setItem(RUN_KEY, JSON.stringify(m))
+  return m[id]
 }
-function clearRunCount (id: number) {
-  const map = JSON.parse(localStorage.getItem(RUN_COUNT_KEY) ?? "{}")
-  delete map[id]
-  localStorage.setItem(RUN_COUNT_KEY, JSON.stringify(map))
+function clearRun (id: number) {
+  const m = JSON.parse(localStorage.getItem(RUN_KEY) ?? '{}')
+  delete m[id]
+  localStorage.setItem(RUN_KEY, JSON.stringify(m))
 }
 
-/* ---------------------------------------------------------------- component */
+const ALLOW_SELF = import.meta.env.ALLOW_SELF_RATING === 'true'
+
 export default function Library ({ onRun, onEdit }: Props) {
-  const {
-    data: templates = [],
-    isLoading,
-    refetch,
-  } = useQuery({ queryKey: ["templates"], queryFn: fetchTemplates })
+  const { data: templates = [], isLoading, refetch } = useQuery({
+    queryKey: ['templates'],
+    queryFn : fetchTemplates,
+  })
 
-  const locals    = templates.filter((t) => !t.is_public)
-  const community = templates.filter((t) =>  t.is_public)
+  /* split lists */
+  const created    = templates.filter(t => !t.source_id)
+  const downloaded = templates.filter(t => t.source_id != null)
 
-  const [toPublish, setToPublish]   = useState<TemplateJSON | null>(null)
-  const [rateId, setRateId]         = useState<number | null>(null)
+  /* auth uid */
+  const [uid, setUid] = useState<string | null>(null)
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUid(data.user?.id ?? null))
+  }, [])
+
+  /* dialogs */
+  const [pub,  setPub]  = useState<TemplateJSON | null>(null)
+  const [rate, setRate] = useState<{ id: number, original: number } | null>(null)
+
+  const price = (c: number) => (c ? `$${(c / 100).toFixed(2)}` : 'Free')
+
+  async function handleRun (tpl: TemplateJSON) {
+    await onRun(tpl)
+    if (!tpl.id) return
+    if (tpl.owner_id === uid && !ALLOW_SELF) return   // self-rating guard
+
+    /* use original id when rating a local copy */
+    const originalId = tpl.source_id ?? tpl.id
+    const runs = bumpRun(originalId)
+    if (runs >= 2) setRate({ id: tpl.id, original: originalId })
+  }
 
   async function handleDelete (tpl: TemplateJSON) {
     await deleteTemplate(tpl)
     void refetch()
   }
 
-  async function handleRun (tpl: TemplateJSON) {
-    await onRun(tpl)
-    if (!tpl.id) return
-    const runs = incRunCount(tpl.id)
-    if (runs >= 2) setRateId(tpl.id)
-  }
+  const Badge = ({ label }: { label: string }) => (
+    <span style={{
+      background:'#eee',fontSize:11,padding:'2px 6px',
+      borderRadius:4,marginRight:6,textTransform:'uppercase'}}>
+      {label}
+    </span>
+  )
 
-  const price = (cents: number) =>
-    cents ? `$${(cents / 100).toFixed(2)}` : "Free"
-
-  function Section (
-    title: string,
-    rows : TemplateJSON[],
-    showCrud: boolean,
-  ) {
-    return (
-      <>
-        <h3 style={{ marginTop: 32 }}>{title}</h3>
-        {rows.length === 0 ? (
-          <p style={{ fontStyle: "italic" }}>None yet.</p>
-        ) : (
-          <table style={{ borderSpacing: 8 }}>
-            <thead>
-              <tr>
-                <th align="left">Title</th>
-                <th align="left">Tags</th>
-                <th align="left">Price</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((t) => (
-                <tr key={(t.id ?? t.title) + (t.is_public ? "pub" : "loc")}>
-                  <td>{t.title}</td>
-                  <td>{t.tags.join(", ")}</td>
-                  <td>{price(t.price_cents)}</td>
-                  <td>
-                    <button onClick={() => handleRun(t)}>Run</button>{" "}
-                    {showCrud && (
-                      <>
-                        <button onClick={() => onEdit(t)}>Edit</button>{" "}
-                        <button onClick={() => handleDelete(t)}>Delete</button>{" "}
-                        <button onClick={() => setToPublish(t)}>Publish</button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+  const Row = (t: TemplateJSON, canCrud: boolean, label: string) => (
+    <tr key={t.id ?? t.title}>
+      <td>
+        <Badge label={label} /> {t.title}
+      </td>
+      <td>{t.tags.join(', ')}</td>
+      <td>{price(t.price_cents)}</td>
+      <td>
+        <button onClick={() => handleRun(t)}>Run</button>{' '}
+        {canCrud && (
+          <>
+            <button onClick={() => onEdit(t)}>Edit</button>{' '}
+            <button onClick={() => handleDelete(t)}>Delete</button>{' '}
+            <button onClick={() => setPub(t)}>Publish</button>
+          </>
         )}
-      </>
-    )
-  }
+      </td>
+    </tr>
+  )
 
   if (isLoading) return <p>Loading templates…</p>
 
   return (
-    <div style={{ maxWidth: 900, paddingBottom: 48 }}>
-      <h1>Library</h1>
+    <div style={{ maxWidth: 900 }}>
+      <h1>My Library</h1>
 
-      <button onClick={() => onEdit(null)} style={{ marginBottom: 24 }}>
+      <button onClick={() => onEdit(null)} style={{ margin: '16px 0' }}>
         + New Template
       </button>
 
-      {Section("My Automations", locals, true)}
-      <hr style={{ margin: "40px 0" }} />
-      {Section("Community", community, false)}
+      {/* My creations */}
+      <h3>Created</h3>
+      <table style={{ borderSpacing: 8 }}>
+        <thead><tr><th align="left">Title</th><th>Tags</th><th>Price</th><th /></tr></thead>
+        <tbody>{created.map(t => Row(t, true, 'created'))}</tbody>
+      </table>
 
-      {/* Publish modal */}
-      {toPublish && (
-        <PublishDialog
-          tpl={toPublish}
-          onClose={(published) => {
-            setToPublish(null)
-            if (published) void refetch()
-          }}
-        />
+      {/* Downloads / Purchases */}
+      {downloaded.length > 0 && (
+        <>
+          <hr style={{ margin: '32px 0' }} />
+          <h3>Downloads</h3>
+          <table style={{ borderSpacing: 8 }}>
+            <thead><tr><th align="left">Title</th><th>Tags</th><th>Price</th><th /></tr></thead>
+            <tbody>{downloaded.map(t =>
+              Row(t, false, t.price_cents ? 'purchased' : 'downloaded'))}
+            </tbody>
+          </table>
+        </>
       )}
 
-      {/* Rating modal */}
-      {rateId && (
+      {/* dialogs */}
+      {pub && (
+        <PublishDialog
+          tpl={pub}
+          onClose={(done) => { setPub(null); if (done) void refetch() }}
+        />
+      )}
+      {rate && (
         <RatingPrompt
-          templateId={rateId}
-          onClose={() => {
-            clearRunCount(rateId)
-            setRateId(null)
-          }}
+          templateId={rate.original}
+          onClose={() => { clearRun(rate.original); setRate(null) }}
         />
       )}
     </div>
