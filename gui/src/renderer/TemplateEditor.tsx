@@ -1,119 +1,142 @@
-/* ───────────────────────── renderer/TemplateEditor.tsx */
-import React, { useState, useEffect } from "react";
-import {
-  TemplateJSON,
-  saveTemplate,          // ← this is the only service call we need
-} from "../services/templates";
+/* ───────────────────────── renderer/TemplateEditor.tsx
+   Stand-alone editor – fully controlled form, resets on each edit
+────────────────────────────────────────────────────────── */
+import React, { useState, useEffect } from 'react'
+import { saveTemplate, TemplateJSON } from '@/services/templates'
 
-/* Props:
-   • editing = existing template or null for “New”
-   • onClose = callback after save/cancel */
-interface Props {
-  editing: TemplateJSON | null;
-  onClose: () => void;
-}
-
-export default function TemplateEditor({ editing, onClose }: Props) {
-  /* form state */
-  const [title       , setTitle]        = useState("");
-  const [prompt      , setPrompt]       = useState("");
-  const [instructions, setInstructions] = useState("");
-  const [tags        , setTags]         = useState("");
-  const [priceCents  , setPriceCents]   = useState(0);
-  const [saving      , setSaving]       = useState(false);
-
-  /* load existing template into form */
-  useEffect(() => {
-    if (!editing) return;
-    setTitle(editing.title);
-    setPrompt(editing.prompt);
-    setInstructions(editing.instructions);
-    setTags(editing.tags.join(", "));
-    setPriceCents(editing.price_cents);
-  }, [editing]);
-
-  /* handle save (insert or update) */
-  async function handleSave() {
-    if (!title.trim() || !prompt.trim()) {
-      alert("Title and Prompt are required.");
-      return;
-    }
-
-    const tpl: TemplateJSON = {
-      ...editing,                       // keeps id/creator/version if editing
-      title       : title.trim(),
-      prompt      : prompt.trim(),
-      instructions: instructions.trim(),
-      tags        : tags
-                    .split(",")
-                    .map((t) => t.trim())
-                    .filter(Boolean),
-      price_cents : priceCents,
-      version     : editing?.version ?? "1.0.0",
-      is_public   : editing?.is_public ?? false,
-    };
-
-    try {
-      setSaving(true);
-      await saveTemplate(tpl);          // ⬅️  only call we need
-      onClose();                        // go back to Library
-    } finally {
-      setSaving(false);
-    }
+export default function TemplateEditor({
+  editing,
+  onClose,
+}: {
+  editing: TemplateJSON | null
+  onClose: () => void
+}) {
+  // Default blank template
+  const blank: TemplateJSON = {
+    title: '',
+    prompt: '',
+    instructions: '',
+    tags: [],
+    price_cents: 0,
+    version: 1,
+    is_public: false,
   }
 
-  /* simple styles */
-  const label = { display: "block", marginTop: 12 };
-  const input = { width: 400, padding: "6px 8px" };
+  // Controlled state, resets when `editing` changes
+  const [tpl, setTpl] = useState<TemplateJSON>(editing ?? blank)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    // Reset form any time we get a new `editing` prop
+    setTpl(editing ?? blank)
+  }, [editing])
+
+  // Generic setter for simple string/number fields
+  const bind = <K extends keyof TemplateJSON>(key: K) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setTpl({
+        ...tpl,
+        [key]:
+          key === 'price_cents'
+            ? Number(e.target.value)
+            : key === 'version'
+            ? isNaN(Number(e.target.value))
+              ? tpl.version
+              : Number(e.target.value)
+            : e.target.value,
+      } as TemplateJSON)
+
+  // Special handler for tags (comma-separated)
+  const setTags = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTpl({
+      ...tpl,
+      tags: e.target.value
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    })
+  }
+
+  async function handleSave() {
+    setBusy(true)
+    await saveTemplate(tpl)
+    onClose()
+  }
 
   return (
-    <div style={{ padding: 24 }}>
-      <h2>{editing ? "Edit Template" : "New Template"}</h2>
+    <div style={{ maxWidth: 600 }}>
+      <h2>{editing ? 'Edit' : 'New'} Template</h2>
 
-      <label style={label}>Title*</label>
-      <input
-        style={input}
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-      />
+      <label>
+        Title<br />
+        <input
+          value={tpl.title}
+          onChange={bind('title')}
+          style={{ width: '100%' }}
+        />
+      </label>
+      <br />
 
-      <label style={label}>Prompt*</label>
-      <textarea
-        style={{ ...input, height: 80 }}
-        value={prompt}
-        onChange={(e) => setPrompt(e.target.value)}
-      />
+      <label>
+        Prompt<br />
+        <textarea
+          value={tpl.prompt}
+          onChange={bind('prompt')}
+          style={{ width: '100%', height: 60 }}
+        />
+      </label>
+      <br />
 
-      <label style={label}>Instructions</label>
-      <textarea
-        style={{ ...input, height: 60 }}
-        value={instructions}
-        onChange={(e) => setInstructions(e.target.value)}
-      />
+      <label>
+        Instructions<br />
+        <textarea
+          value={tpl.instructions}
+          onChange={bind('instructions')}
+          style={{ width: '100%', height: 90 }}
+        />
+      </label>
+      <br />
 
-      <label style={label}>Tags (comma-separated)</label>
-      <input
-        style={input}
-        value={tags}
-        onChange={(e) => setTags(e.target.value)}
-      />
+      <label>
+        Tags (comma separated)<br />
+        <input
+          value={tpl.tags.join(', ')}
+          onChange={setTags}
+          style={{ width: '100%' }}
+        />
+      </label>
+      <br />
 
-      <label style={label}>Price (¢)</label>
-      <input
-        type="number"
-        style={{ ...input, width: 120 }}
-        value={priceCents}
-        onChange={(e) => setPriceCents(Number(e.target.value))}
-      />
+      <label>
+        Price (cents)<br />
+        <input
+          type="number"
+          value={tpl.price_cents}
+          onChange={bind('price_cents')}
+          style={{ width: '100%' }}
+        />
+      </label>
+      <br />
 
-      <div style={{ marginTop: 24 }}>
-        <button onClick={handleSave} disabled={saving}>
-          {saving ? "Saving…" : "Save"}
-        </button>{" "}
-        <button onClick={onClose} disabled={saving}>
+      <label>
+        Version<br />
+        <input
+          type="number"
+          value={tpl.version as number}
+          onChange={bind('version')}
+          style={{ width: '100%' }}
+        />
+      </label>
+      <br />
+
+      <div style={{ marginTop: 16, textAlign: 'right' }}>
+        <button onClick={onClose} style={{ marginRight: 8 }} disabled={busy}>
           Cancel
+        </button>
+        <button onClick={handleSave} disabled={busy}>
+          {busy ? 'Saving…' : 'Save'}
         </button>
       </div>
     </div>
-  );
+  )
 }
