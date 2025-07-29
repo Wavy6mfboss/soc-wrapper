@@ -1,97 +1,36 @@
-/* ──────────── Templates helper – local-storage + Supabase ──────────── */
+chunk-SOPOILPT.js?v=4dc05751:21551 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+v3:1 You may test your Stripe.js integration over HTTP. However, live Stripe.js integrations must use HTTPS.
+value @ v3:1
+e @ v3:1
+N_ @ v3:1
+initStripe2 @ @stripe_stripe-js.js?v=4dc05751:103
+(anonymous) @ @stripe_stripe-js.js?v=4dc05751:133
+Show 2 more frames
+Show less
+VM4 sandbox_bundle:2 Electron Security Warning (Insecure Content-Security-Policy) This renderer process has either no Content Security
+  Policy set or a policy with "unsafe-eval" enabled. This exposes users of
+  this app to unnecessary security risks.
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-
-/* ---------- env -------------------------------------------------------- */
-type MaybeEnv = Record<string, any> | undefined
-const iEnv: MaybeEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined
-const nEnv: MaybeEnv = typeof process    !== 'undefined' ? (process as any).env    : undefined
-const wEnv: MaybeEnv = typeof window     !== 'undefined' ? (window  as any).ENV    : undefined
-function env (k: string) { return iEnv?.[k] ?? nEnv?.[k] ?? wEnv?.[k] }
-
-const URL  = env('VITE_SUPABASE_URL')
-const ANON = env('VITE_SUPABASE_ANON_KEY')
-if (!URL || !ANON) throw new Error('[templates] Missing VITE_SUPABASE_*')
-
-/* ---------- client ----------------------------------------------------- */
-export const supabase: SupabaseClient =
-  (globalThis as any).__SOC_SUPABASE__ ||
-  ((globalThis as any).__SOC_SUPABASE__ = createClient(URL, ANON))
-
-/* ---------- types ------------------------------------------------------ */
-export interface TemplateJSON {
-  id?: number
-  title: string
-  prompt: string
-  instructions: string
-  tags: string[]
-  price_cents: number
-  version: number | string
-  is_public: boolean
-  owner_id?: string | null
-  source_id?: number | null
-  created_at?: string
-}
-
-/* ---------- local-storage helpers ------------------------------------- */
-const LOCAL_KEY = 'soc-wrapper-templates-v1'
-
-export function loadLocalTemplates (): TemplateJSON[] {
-  try {
-    return JSON.parse(localStorage.getItem(LOCAL_KEY) ?? '[]')
-  } catch {
-    return []
-  }
-}
-
-function saveLocalTemplate (tpl: TemplateJSON) {
-  const list = loadLocalTemplates()
-  if (tpl.id == null) tpl.id = Date.now()
-  const idx = list.findIndex((t) => t.id === tpl.id)
-  idx >= 0 ? (list[idx] = tpl) : list.push(tpl)
-  localStorage.setItem(LOCAL_KEY, JSON.stringify(list))
-}
-
-export function deleteTemplate (tpl: TemplateJSON) {
-  if (tpl.is_public || tpl.source_id) {
-    return supabase.from('templates').delete().eq('id', tpl.id)
-  }
-  const list = loadLocalTemplates().filter((t) => t.id !== tpl.id)
-  localStorage.setItem(LOCAL_KEY, JSON.stringify(list))
-}
-
-/* ---------- Supabase helpers ------------------------------------------ */
-async function fetchPublicTemplates (): Promise<TemplateJSON[]> {
-  const { data, error } = await supabase
-    .from('templates')
-    .select('*')
-    .eq('is_public', true)
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    console.error('[templates] supabase error →', error)
-    return []
-  }
-  return data ?? []
-}
-
-async function upsertPublicTemplate (tpl: TemplateJSON) {
-  const { error } = await supabase.from('templates').upsert(tpl).select()
-  if (error) throw error
-}
-
-/* ---------- public API ------------------------------------------------- */
-export async function fetchTemplates (): Promise<TemplateJSON[]> {
-  const [local, remote] = await Promise.all([
-    Promise.resolve(loadLocalTemplates()),
-    fetchPublicTemplates(),
-  ])
-  return [...local, ...remote]
-}
-
-export async function saveTemplate (tpl: TemplateJSON) {
-  return tpl.is_public ? upsertPublicTemplate(tpl) : saveLocalTemplate(tpl)
-}
-
-/* retained alias */
-export const createTemplate = saveTemplate
+For more information and help, consult
+https://electronjs.org/docs/tutorial/security.
+This warning will not show up
+once the app is packaged.
+warnAboutInsecureCSP @ VM4 sandbox_bundle:2
+logSecurityWarnings @ VM4 sandbox_bundle:2
+(anonymous) @ VM4 sandbox_bundle:2
+localhost/:1 Third-party cookie will be blocked. Learn more in the Issues tab.
+localhost/:1 Third-party cookie will be blocked. Learn more in the Issues tab.
+localhost/:1 Third-party cookie will be blocked. Learn more in the Issues tab.
+localhost/:1 Third-party cookie will be blocked. Learn more in the Issues tab.
+chunk-SOPOILPT.js?v=4dc05751:521 Warning: Encountered two children with the same key, `e00faa62-76c1-486b-ba2c-b65b069e8b28`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+    at tbody
+    at table
+    at div
+    at Library (http://localhost:5180/src/renderer/Library.tsx:41:3)
+    at div
+    at ErrorBoundary (http://localhost:5180/src/renderer/ErrorBoundary.tsx:5:8)
+    at QueryClientProvider (http://localhost:5180/node_modules/.vite/deps/@tanstack_react-query.js?v=4dc05751:2934:3)
+    at App (http://localhost:5180/src/renderer/App.tsx:28:27)
+printWarning @ chunk-SOPOILPT.js?v=4dc05751:521
+Show 1 more frame
+Show less

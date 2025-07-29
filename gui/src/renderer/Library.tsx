@@ -1,6 +1,4 @@
-/* ───────────────────────── renderer/Library.tsx
-   My Library – show NULL-owner rows, downloads editable
-──────────────────────────────────────────────────────────────── */
+/* ───────────────────────── renderer/Library.tsx */
 import React, { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -9,53 +7,50 @@ import {
 import PublishDialog from './PublishDialog'
 import RatingPrompt  from './RatingPrompt'
 
-interface Props { onRun: (t:TemplateJSON)=>void; onEdit:(t:TemplateJSON|null)=>void }
+interface Props{
+  onRun :(tpl:TemplateJSON)=>void
+  onEdit:(tpl:TemplateJSON|null)=>void   // navigates to separate editor page
+}
 
-/* run-counter local store */
 const KEY='soc-wrapper-run-counts-v1'
-const bump=(id:number)=>{const m=JSON.parse(localStorage.getItem(KEY)??'{}');m[id]=(m[id]??0)+1;localStorage.setItem(KEY,JSON.stringify(m));return m[id]}
-const clear=(id:number)=>{const m=JSON.parse(localStorage.getItem(KEY)??'{}');delete m[id];localStorage.setItem(KEY,JSON.stringify(m))}
-
+const bump=id=>{const m=JSON.parse(localStorage.getItem(KEY)??'{}');m[id]=(m[id]??0)+1;localStorage.setItem(KEY,JSON.stringify(m));return m[id]}
+const clear=id=>{const m=JSON.parse(localStorage.getItem(KEY)??'{}');delete m[id];localStorage.setItem(KEY,JSON.stringify(m))}
 const ALLOW_SELF=import.meta.env.ALLOW_SELF_RATING==='true'
 
 export default function Library({onRun,onEdit}:Props){
-  const {data:templates=[],isLoading}=useQuery({queryKey:['templates'],queryFn:fetchTemplates})
-
-  /* uid===undefined → still fetching | null → anon | string → logged in */
+  const{data:list=[],isLoading,refetch}=useQuery({queryKey:['templates'],queryFn:fetchTemplates})
   const[uid,setUid]=useState<string|null|undefined>(undefined)
   useEffect(()=>{supabase.auth.getUser().then(r=>setUid(r.data.user?.id??null))},[])
 
-  /* treat owner_id NULL as mine (local pre-auth items) */
-  const mine = uid===undefined ? [] : templates.filter(t=> (t.owner_id??null)===uid || t.owner_id==null)
+  const mine = uid===undefined?[]:list.filter(t=>t.owner_id==uid||t.owner_id==null)
   const created  = mine.filter(t=>!t.source_id)
-  const downloads= mine.filter(t=> t.source_id!=null)
+  const downloads= mine.filter(t=> t.source_id)
 
-  const[pub,setPub]=useState<TemplateJSON|null>(null)
-  const[rate,setRate]=useState<{id:number,orig:number}|null>(null)
+  const[pub ,setPub ]=useState<TemplateJSON|null>(null)
+  const[rate,setRate]=useState<string|null>(null)
 
-  const price=(c:number)=>c?`$${(c/100).toFixed(2)}`:'Free'
   async function run(t:TemplateJSON){
     await onRun(t)
-    if(!t.id)return
-    if(t.owner_id===uid && !ALLOW_SELF)return
-    const orig=t.source_id??t.id
-    if(bump(orig)>=2)setRate({id:t.id,orig})
+    const orig=t.source_id??t.id!
+    const self=t.source_id==null&&(t.owner_id==uid||t.owner_id==null)
+    if(self&&!ALLOW_SELF) return
+    if(bump(orig)>=2) setRate(orig)
   }
-  async function del(t:TemplateJSON){await deleteTemplate(t)}
+  async function del(t:TemplateJSON){ await deleteTemplate(t); await refetch() }
 
-  const Badge=({txt}:{txt:string})=>(
-    <span style={{background:'#eee',fontSize:11,padding:'2px 6px',borderRadius:4,marginRight:6,textTransform:'uppercase'}}>{txt}</span>)
-  const Row=(t:TemplateJSON,label:string)=>(
-    <tr key={t.id??t.title}>
-      <td><Badge txt={label}/> {t.title}</td><td>{t.tags.join(', ')}</td><td>{price(t.price_cents)}</td>
-      <td>
-        <button onClick={()=>run(t)}>Run</button>{' '}
-        <button onClick={()=>onEdit(t)}>Edit</button>{' '}
-        <button onClick={()=>del(t)}>Delete</button>{' '}
-        {label==='created'&&<button onClick={()=>setPub(t)}>Publish</button>}
-      </td>
-    </tr>)
-  if(isLoading||uid===undefined)return<p>Loading…</p>
+  const price=(c:number)=>c?`$${(c/100).toFixed(2)}`:'Free'
+  const badge=(s:string)=><span style={{background:'#eee',fontSize:11,padding:'2px 6px',borderRadius:4,marginRight:6,textTransform:'uppercase'}}>{s}</span>
+  const Row=(t:TemplateJSON,lbl:string)=>(<tr key={t.id}>
+    <td>{badge(lbl)}{t.title}</td><td>{t.tags.join(', ')}</td><td>{price(t.price_cents)}</td>
+    <td>
+      <button onClick={()=>run(t)}>Run</button>{' '}
+      <button onClick={()=>onEdit(t)}>Edit</button>{' '}
+      <button onClick={()=>del(t)}>Delete</button>{' '}
+      {lbl==='created'&&<button onClick={()=>setPub(t)}>Publish</button>}
+    </td>
+  </tr>)
+
+  if(isLoading||uid===undefined) return<p>Loading…</p>
 
   return(<div style={{maxWidth:900}}>
     <h1>My Library</h1>
@@ -71,7 +66,7 @@ export default function Library({onRun,onEdit}:Props){
         <tbody>{downloads.map(t=>Row(t,t.price_cents?'purchased':'downloaded'))}</tbody></table>
     </>}
 
-    {pub&&<PublishDialog tpl={pub} onClose={()=>setPub(null)}/>}
-    {rate&&<RatingPrompt templateId={rate.orig} onClose={()=>{clear(rate.orig);setRate(null)}}/>}
+    {pub &&<PublishDialog tpl={pub} onClose={()=>{setPub(null);refetch()}}/>}
+    {rate&&<RatingPrompt templateId={rate} onClose={()=>{clear(rate);setRate(null)}}/>}
   </div>)
 }
