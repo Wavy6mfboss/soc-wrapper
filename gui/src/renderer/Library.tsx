@@ -1,7 +1,6 @@
 /* ───────────────────────── renderer/Library.tsx
-   Lists local + community templates with Run / Edit / Delete / Publish
-────────────────────────────────────────────────────────────────── */
-
+   Lists templates, handles Run / Edit / Delete / Publish / Rate
+──────────────────────────────────────────────────────────────── */
 import React, { useState } from "react"
 import { useQuery }        from "@tanstack/react-query"
 import {
@@ -10,11 +9,28 @@ import {
   TemplateJSON,
 } from "@/services/templates"
 import PublishDialog from "./PublishDialog"
+import RatingPrompt  from "./RatingPrompt"
 
 /* ---------------------------------------------------------------- types */
 interface Props {
   onRun : (tpl: TemplateJSON) => void
   onEdit: (tpl: TemplateJSON | null) => void
+}
+
+/* ---------------------------------------------------------------- constants */
+const RUN_COUNT_KEY = "soc-wrapper-run-counts-v1" // { [tplId]: number }
+
+/* ---------------------------------------------------------------- helpers */
+function incRunCount (id: number) {
+  const map = JSON.parse(localStorage.getItem(RUN_COUNT_KEY) ?? "{}")
+  map[id] = (map[id] ?? 0) + 1
+  localStorage.setItem(RUN_COUNT_KEY, JSON.stringify(map))
+  return map[id]
+}
+function clearRunCount (id: number) {
+  const map = JSON.parse(localStorage.getItem(RUN_COUNT_KEY) ?? "{}")
+  delete map[id]
+  localStorage.setItem(RUN_COUNT_KEY, JSON.stringify(map))
 }
 
 /* ---------------------------------------------------------------- component */
@@ -28,22 +44,28 @@ export default function Library ({ onRun, onEdit }: Props) {
   const locals    = templates.filter((t) => !t.is_public)
   const community = templates.filter((t) =>  t.is_public)
 
-  const [toPublish, setToPublish] = useState<TemplateJSON | null>(null)
+  const [toPublish, setToPublish]   = useState<TemplateJSON | null>(null)
+  const [rateId, setRateId]         = useState<number | null>(null)
 
   async function handleDelete (tpl: TemplateJSON) {
     await deleteTemplate(tpl)
     void refetch()
   }
 
-  /* money formatter */
+  async function handleRun (tpl: TemplateJSON) {
+    await onRun(tpl)
+    if (!tpl.id) return
+    const runs = incRunCount(tpl.id)
+    if (runs >= 2) setRateId(tpl.id)
+  }
+
   const price = (cents: number) =>
     cents ? `$${(cents / 100).toFixed(2)}` : "Free"
 
-  /* reusable section */
   function Section (
     title: string,
     rows : TemplateJSON[],
-    showCrud: boolean,   // Edit/Delete/Publish?
+    showCrud: boolean,
   ) {
     return (
       <>
@@ -67,7 +89,7 @@ export default function Library ({ onRun, onEdit }: Props) {
                   <td>{t.tags.join(", ")}</td>
                   <td>{price(t.price_cents)}</td>
                   <td>
-                    <button onClick={() => onRun(t)}>Run</button>{" "}
+                    <button onClick={() => handleRun(t)}>Run</button>{" "}
                     {showCrud && (
                       <>
                         <button onClick={() => onEdit(t)}>Edit</button>{" "}
@@ -106,6 +128,17 @@ export default function Library ({ onRun, onEdit }: Props) {
           onClose={(published) => {
             setToPublish(null)
             if (published) void refetch()
+          }}
+        />
+      )}
+
+      {/* Rating modal */}
+      {rateId && (
+        <RatingPrompt
+          templateId={rateId}
+          onClose={() => {
+            clearRunCount(rateId)
+            setRateId(null)
           }}
         />
       )}
