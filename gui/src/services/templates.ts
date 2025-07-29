@@ -1,40 +1,24 @@
-/* ─────────────── Templates helper – local-storage + Supabase ───────────── */
+/* ──────────── Templates helper – local-storage + Supabase ──────────── */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
-/* ---------- env helpers -------------------------------------------------- */
-/* Works in Vite (import.meta.env), Node (process.env), and tests (window.ENV) */
+/* ---------- env -------------------------------------------------------- */
 type MaybeEnv = Record<string, any> | undefined
-const iEnv: MaybeEnv =
-  typeof import.meta !== 'undefined' && (import.meta as any).env
-    ? (import.meta as any).env
-    : undefined
-const nEnv: MaybeEnv =
-  typeof process !== 'undefined' && (process as any).env
-    ? (process as any).env
-    : undefined
-const wEnv: MaybeEnv =
-  typeof window !== 'undefined' && (window as any).ENV
-    ? (window as any).ENV
-    : undefined
+const iEnv: MaybeEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined
+const nEnv: MaybeEnv = typeof process    !== 'undefined' ? (process as any).env    : undefined
+const wEnv: MaybeEnv = typeof window     !== 'undefined' ? (window  as any).ENV    : undefined
+function env (k: string) { return iEnv?.[k] ?? nEnv?.[k] ?? wEnv?.[k] }
 
-function env (key: string): string | undefined {
-  return iEnv?.[key] ?? nEnv?.[key] ?? wEnv?.[key]
-}
+const URL  = env('VITE_SUPABASE_URL')
+const ANON = env('VITE_SUPABASE_ANON_KEY')
+if (!URL || !ANON) throw new Error('[templates] Missing VITE_SUPABASE_*')
 
-const SUPABASE_URL  = env('VITE_SUPABASE_URL')
-const SUPABASE_ANON = env('VITE_SUPABASE_ANON_KEY')
-
-if (!SUPABASE_URL || !SUPABASE_ANON) {
-  throw new Error('[templates] Missing VITE_SUPABASE_* env vars')
-}
-
-/* ---------- singleton client --------------------------------------------- */
+/* ---------- client ----------------------------------------------------- */
 export const supabase: SupabaseClient =
-  (globalThis as any).__SOC_SUPABASE__ ??
-  ((globalThis as any).__SOC_SUPABASE__ = createClient(SUPABASE_URL, SUPABASE_ANON))
+  (globalThis as any).__SOC_SUPABASE__ ||
+  ((globalThis as any).__SOC_SUPABASE__ = createClient(URL, ANON))
 
-/* ---------- types -------------------------------------------------------- */
+/* ---------- types ------------------------------------------------------ */
 export interface TemplateJSON {
   id?: number
   title: string
@@ -42,12 +26,14 @@ export interface TemplateJSON {
   instructions: string
   tags: string[]
   price_cents: number
-  version: string
+  version: number | string
   is_public: boolean
+  owner_id?: string | null
+  source_id?: number | null
   created_at?: string
 }
 
-/* ---------- local-storage helpers --------------------------------------- */
+/* ---------- local-storage helpers ------------------------------------- */
 const LOCAL_KEY = 'soc-wrapper-templates-v1'
 
 export function loadLocalTemplates (): TemplateJSON[] {
@@ -67,14 +53,14 @@ function saveLocalTemplate (tpl: TemplateJSON) {
 }
 
 export function deleteTemplate (tpl: TemplateJSON) {
-  if (tpl.is_public) {
+  if (tpl.is_public || tpl.source_id) {
     return supabase.from('templates').delete().eq('id', tpl.id)
   }
   const list = loadLocalTemplates().filter((t) => t.id !== tpl.id)
   localStorage.setItem(LOCAL_KEY, JSON.stringify(list))
 }
 
-/* ---------- Supabase helpers ------------------------------------------- */
+/* ---------- Supabase helpers ------------------------------------------ */
 async function fetchPublicTemplates (): Promise<TemplateJSON[]> {
   const { data, error } = await supabase
     .from('templates')
@@ -94,7 +80,7 @@ async function upsertPublicTemplate (tpl: TemplateJSON) {
   if (error) throw error
 }
 
-/* ---------- public API -------------------------------------------------- */
+/* ---------- public API ------------------------------------------------- */
 export async function fetchTemplates (): Promise<TemplateJSON[]> {
   const [local, remote] = await Promise.all([
     Promise.resolve(loadLocalTemplates()),
