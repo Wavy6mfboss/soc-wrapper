@@ -1,5 +1,5 @@
 /* ───────────────────────── renderer/Library.tsx
-   My Library – badges, self-rating guard, publish & run
+   My Library – created vs. downloaded/purchased, all editable
 ──────────────────────────────────────────────────────────────── */
 
 import React, { useEffect, useState } from 'react'
@@ -18,15 +18,15 @@ interface Props {
   onEdit: (tpl: TemplateJSON | null) => void
 }
 
-/* run-count storage */
+/* run-count local store */
 const RUN_KEY = 'soc-wrapper-run-counts-v1'
-function bumpRun (id: number) {
+const bumpRun = (id: number) => {
   const m = JSON.parse(localStorage.getItem(RUN_KEY) ?? '{}')
   m[id] = (m[id] ?? 0) + 1
   localStorage.setItem(RUN_KEY, JSON.stringify(m))
   return m[id]
 }
-function clearRun (id: number) {
+const clearRun = (id: number) => {
   const m = JSON.parse(localStorage.getItem(RUN_KEY) ?? '{}')
   delete m[id]
   localStorage.setItem(RUN_KEY, JSON.stringify(m))
@@ -40,15 +40,18 @@ export default function Library ({ onRun, onEdit }: Props) {
     queryFn : fetchTemplates,
   })
 
-  /* split lists */
-  const created    = templates.filter(t => !t.source_id)
-  const downloaded = templates.filter(t => t.source_id != null)
-
-  /* auth uid */
-  const [uid, setUid] = useState<string | null>(null)
+  /* uid:  undefined → loading | null → anon | string → logged-in user */
+  const [uid, setUid] = useState<string | null | undefined>(undefined)
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUid(data.user?.id ?? null))
+    supabase.auth.getUser().then(({ data }) =>
+      setUid(data.user?.id ?? null)
+    )
   }, [])
+
+  /* split once uid known */
+  const owned       = uid == null ? [] : templates.filter(t => t.owner_id === uid)
+  const created     = owned.filter(t => !t.source_id)
+  const downloads   = owned.filter(t => t.source_id != null)
 
   /* dialogs */
   const [pub,  setPub]  = useState<TemplateJSON | null>(null)
@@ -59,12 +62,10 @@ export default function Library ({ onRun, onEdit }: Props) {
   async function handleRun (tpl: TemplateJSON) {
     await onRun(tpl)
     if (!tpl.id) return
-    if (tpl.owner_id === uid && !ALLOW_SELF) return   // self-rating guard
+    if (tpl.owner_id === uid && !ALLOW_SELF) return
 
-    /* use original id when rating a local copy */
-    const originalId = tpl.source_id ?? tpl.id
-    const runs = bumpRun(originalId)
-    if (runs >= 2) setRate({ id: tpl.id, original: originalId })
+    const original = tpl.source_id ?? tpl.id
+    if (bumpRun(original) >= 2) setRate({ id: tpl.id, original })
   }
 
   async function handleDelete (tpl: TemplateJSON) {
@@ -72,35 +73,30 @@ export default function Library ({ onRun, onEdit }: Props) {
     void refetch()
   }
 
-  const Badge = ({ label }: { label: string }) => (
+  const Badge = ({ txt }: { txt: string }) => (
     <span style={{
-      background:'#eee',fontSize:11,padding:'2px 6px',
-      borderRadius:4,marginRight:6,textTransform:'uppercase'}}>
-      {label}
+      background:'#eee',fontSize:11,padding:'2px 6px',borderRadius:4,
+      textTransform:'uppercase',marginRight:6}}>
+      {txt}
     </span>
   )
 
-  const Row = (t: TemplateJSON, canCrud: boolean, label: string) => (
+  const Row = (t: TemplateJSON, label: string) => (
     <tr key={t.id ?? t.title}>
-      <td>
-        <Badge label={label} /> {t.title}
-      </td>
+      <td><Badge txt={label} /> {t.title}</td>
       <td>{t.tags.join(', ')}</td>
       <td>{price(t.price_cents)}</td>
       <td>
         <button onClick={() => handleRun(t)}>Run</button>{' '}
-        {canCrud && (
-          <>
-            <button onClick={() => onEdit(t)}>Edit</button>{' '}
-            <button onClick={() => handleDelete(t)}>Delete</button>{' '}
-            <button onClick={() => setPub(t)}>Publish</button>
-          </>
-        )}
+        <button onClick={() => onEdit(t)}>Edit</button>{' '}
+        <button onClick={() => handleDelete(t)}>Delete</button>{' '}
+        {label === 'created' && <button onClick={() => setPub(t)}>Publish</button>}
       </td>
     </tr>
   )
 
-  if (isLoading) return <p>Loading templates…</p>
+  /* ←─── loading only while uid === undefined */
+  if (isLoading || uid === undefined) return <p>Loading…</p>
 
   return (
     <div style={{ maxWidth: 900 }}>
@@ -110,33 +106,27 @@ export default function Library ({ onRun, onEdit }: Props) {
         + New Template
       </button>
 
-      {/* My creations */}
       <h3>Created</h3>
       <table style={{ borderSpacing: 8 }}>
         <thead><tr><th align="left">Title</th><th>Tags</th><th>Price</th><th /></tr></thead>
-        <tbody>{created.map(t => Row(t, true, 'created'))}</tbody>
+        <tbody>{created.map(t => Row(t, 'created'))}</tbody>
       </table>
 
-      {/* Downloads / Purchases */}
-      {downloaded.length > 0 && (
+      {downloads.length > 0 && (
         <>
           <hr style={{ margin: '32px 0' }} />
-          <h3>Downloads</h3>
+          <h3>Downloads & Purchases</h3>
           <table style={{ borderSpacing: 8 }}>
             <thead><tr><th align="left">Title</th><th>Tags</th><th>Price</th><th /></tr></thead>
-            <tbody>{downloaded.map(t =>
-              Row(t, false, t.price_cents ? 'purchased' : 'downloaded'))}
+            <tbody>{downloads.map(t =>
+              Row(t, t.price_cents ? 'purchased' : 'downloaded'))}
             </tbody>
           </table>
         </>
       )}
 
-      {/* dialogs */}
       {pub && (
-        <PublishDialog
-          tpl={pub}
-          onClose={(done) => { setPub(null); if (done) void refetch() }}
-        />
+        <PublishDialog tpl={pub} onClose={(d) => { setPub(null); if (d) void refetch() }} />
       )}
       {rate && (
         <RatingPrompt
