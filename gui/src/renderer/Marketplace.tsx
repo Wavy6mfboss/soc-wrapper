@@ -1,85 +1,97 @@
-/* ───────────────────────── gui/src/renderer/Marketplace.tsx
-   Public Marketplace tab – Sprint-10
-────────────────────────────────────────────────────────────────── */
-
-import { useState } from 'react'
+/* ───────────────────────── renderer/Marketplace.tsx */
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchPublicTemplates, MarketplaceTemplate } from '@/services/marketplace'
+import { supabase } from '@/services/templates'
+import {
+  fetchPublicTemplates,
+  publishLocalCopy,
+  MarketplaceTemplate,
+} from '@/services/marketplace'
 
-/* ---------- helper components ------------------------------------------- */
-function Star ({ filled }: { filled: boolean }) {
-  return <span style={{ color: filled ? '#f6b73c' : '#ccc' }}>★</span>
-}
+type Filter = 'all' | 'free' | 'paid' | 'top'
+const chips: Filter[] = ['all', 'free', 'paid', 'top']
 
-function Rating ({ avg, count }: { avg: number; count: number }) {
-  if (!count) return <span style={{ fontSize: 12 }}>—</span>
-  const rounded = Math.round(avg)
-  return (
-    <span>
-      {Array.from({ length: 5 }).map((_, i) => (
-        <Star key={i} filled={i < rounded} />
-      ))}
-      <span style={{ fontSize: 12, marginLeft: 4 }}>({count})</span>
-    </span>
-  )
-}
-
-/* ---------- main component ---------------------------------------------- */
 export default function Marketplace () {
-  const [sort, setSort] = useState<'new' | 'top'>('new')
+  const [filter, setFilter] = useState<Filter>('all')
+  const [uid, setUid]       = useState<string | null>(null)
+  const [busy, setBusy]     = useState<number | null>(null)
 
-  const { data = [], isLoading } = useQuery({
-    queryKey: ['marketplace', sort],
-    queryFn: () => fetchPublicTemplates(sort),
+  /* fetch uid once */
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUid(data.user?.id ?? null))
+  }, [])
+
+  /* list */
+  const { data = [], isLoading, refetch } = useQuery({
+    queryKey: ['marketplace', filter, uid],
+    queryFn : () => fetchPublicTemplates(
+      filter === 'top' ? 'top' : 'new',
+      uid ?? undefined,
+    ),
   })
+
+  const rows =
+    filter === 'free' ? data.filter(t => t.price_cents === 0)
+    : filter === 'paid' ? data.filter(t => t.price_cents > 0)
+    : data
+
+  /* -------- Download or Buy (works if uid is null) */
+  async function handleDownload (tpl: MarketplaceTemplate) {
+    if (busy) return
+    setBusy(tpl.id!)
+    const { error } = await publishLocalCopy(tpl, uid)
+    setBusy(null)
+    if (error) return alert(error.message)
+    alert('Added to My Library.')
+  }
 
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-2xl font-semibold">Marketplace</h1>
 
-      {/* sort chips */}
+      {/* chips */}
       <div className="flex gap-2">
-        {(['new', 'top'] as const).map((key) => (
-          <button
-            key={key}
-            onClick={() => setSort(key)}
+        {chips.map(k => (
+          <button key={k}
+            onClick={() => setFilter(k)}
             className={`px-3 py-1 rounded-full text-sm border ${
-              sort === key ? 'bg-blue-600 text-white' : 'border-gray-300'
-            }`}
-          >
-            {key === 'new' ? 'Newest' : 'Top Rated'}
+              filter === k ? 'bg-blue-600 text-white' : 'border-gray-300'
+            }`}>
+            {k === 'top' ? 'Top Rated'
+              : k.charAt(0).toUpperCase() + k.slice(1)}
           </button>
         ))}
+        <button onClick={() => refetch()} className="ml-auto text-sm underline">
+          ↻ Refresh
+        </button>
       </div>
 
-      {/* table */}
-      {isLoading ? (
-        <p>Loading…</p>
-      ) : (
+      {isLoading ? <p>Loading…</p> : (
         <table className="w-full text-sm border-collapse">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left py-2">Title</th>
-              <th className="text-left py-2">Tags</th>
-              <th className="text-center py-2">Rating</th>
-            </tr>
-          </thead>
+          <thead><tr className="border-b">
+            <th align="left">Title</th><th>Tags</th><th>★</th>
+            <th align="right">Price</th><th align="right" /></tr></thead>
           <tbody>
-            {data.map((tpl: MarketplaceTemplate) => (
-              <tr key={tpl.id} className="border-b hover:bg-gray-50">
-                <td className="py-2">{tpl.title}</td>
-                <td className="py-2">
-                  {tpl.tags.map((t) => (
-                    <span
-                      key={t}
-                      className="inline-block bg-gray-200 text-xs px-2 py-0.5 rounded mr-1"
-                    >
-                      {t}
-                    </span>
-                  ))}
+            {rows.map(t => (
+              <tr key={t.id} className="border-b hover:bg-gray-50">
+                <td>{t.title}</td>
+                <td>{t.tags.join(', ')}</td>
+                <td align="center">
+                  {t.ratingCount ? `${t.avgStars.toFixed(1)} (${t.ratingCount})`
+                                 : '—'}
                 </td>
-                <td className="py-2 text-center">
-                  <Rating avg={tpl.avgStars} count={tpl.ratingCount} />
+                <td align="right">
+                  {t.price_cents
+                    ? `$${(t.price_cents / 100).toFixed(2)}`
+                    : 'Free'}
+                </td>
+                <td align="right">
+                  {busy === t.id ? '…'
+                    : t.price_cents === 0
+                    ? <button onClick={() => handleDownload(t)}>Download</button>
+                    : <button onClick={() => alert('Stripe Checkout TBD')}>
+                        Buy
+                      </button>}
                 </td>
               </tr>
             ))}
