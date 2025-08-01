@@ -1,34 +1,42 @@
 /* ───────────────────────── gui/electron-preload.cjs
-   Safe bridge – full API (original + modal editor helpers)
+   Bridge – full API + _EDITOR_DATA injection
 ────────────────────────────────────────────────────────── */
 const { contextBridge, ipcRenderer } = require('electron')
 
-/* helper: subscribe once, return unsub */
-const sub = (channel, cb) => {
+/* one-shot listener helper */
+const sub = (ch, cb) => {
   const h = (_e, ...a) => cb(...a)
-  ipcRenderer.on(channel, h)
-  return () => ipcRenderer.removeListener(channel, h)
+  ipcRenderer.on(ch, h)
+  return () => ipcRenderer.removeListener(ch, h)
 }
 
 contextBridge.exposeInMainWorld('electron', {
-  /* ---------- original one-shot actions ------------------------------ */
+  /* CLI controls */
   runCli   : args => ipcRenderer.invoke('run-cli', args),
   stopCli  : ()   => ipcRenderer.invoke('stop-cli'),
   getConfig: ()   => ipcRenderer.invoke('getConfig'),
 
-  /* ---------- original realtime CLI hooks ---------------------------- */
+  /* CLI lifecycle hooks */
   onCliStarted: cb => sub('cli-started', cb),
-  onCliEnded  : cb => sub('cli-ended',  cb),   // legacy alias still used
+  onCliEnded  : cb => sub('cli-ended',  cb),
   onCliExited : cb => sub('cli-ended',  cb),
 
-  /* ---------- new helpers -------------------------------------------- */
+  /* editor helpers */
   openEditor : tpl => ipcRenderer.invoke('open-editor', tpl),
   focusWindow: ()  => ipcRenderer.invoke('focus-window'),
 
-  /* ---------- low-level access if ever needed ------------------------ */
+  /* raw access */
   ipcRenderer: {
-    on    : (...a) => ipcRenderer.on   (...a),
+    on    : (...a) => ipcRenderer.on(...a),
     off   : (...a) => ipcRenderer.removeListener(...a),
     invoke: (...a) => ipcRenderer.invoke(...a),
   },
 })
+
+/* Inject template JSON for the modal editor (if present) */
+try {
+  const idx = process.argv.findIndex(a => a === '--editor')
+  if (idx !== -1 && process.argv[idx + 1]) {
+    contextBridge.exposeInMainWorld('_EDITOR_DATA', process.argv[idx + 1])
+  }
+} catch {/* ignore */}
