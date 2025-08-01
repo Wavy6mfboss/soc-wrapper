@@ -1,5 +1,5 @@
 /* ───────────────────────── renderer/RatingPrompt.tsx
-   Rating modal – refetches all active Marketplace queries
+   Rating modal – refresh ALL ['market', …] queries
 ────────────────────────────────────────────────────────── */
 import React, { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -20,8 +20,12 @@ export default function RatingPrompt ({
     setBusy(true)
     try {
       await submitRating(templateId, stars, comment)
-      /* Actively refetch every Marketplace list (['market', ...]) */
-      await qc.refetchQueries({ queryKey: ['market'], exact: false, type: 'active' })
+
+      /* predicate catches *every* key that starts with 'market' */
+      const isMarket = (q:{queryKey:unknown[]}) => q.queryKey[0] === 'market'
+
+      qc.invalidateQueries({ predicate: isMarket })
+      qc.refetchQueries   ({ predicate: isMarket,  type:'active' })
     } finally {
       onClose()
     }
