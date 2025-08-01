@@ -1,34 +1,34 @@
-/* ───────────────────────── electron-preload.cjs
-   Secure bridge → renderer.
-   • Each “onFoo” now returns a clean-up function (unsub) so
-     `const unsub = onFoo(cb)` works and React can call `unsub()`.
-───────────────────────────────────────────────────────────────── */
-const { contextBridge, ipcRenderer } = require('electron');
+/* ───────────────────────── gui/electron-preload.cjs
+   Safe bridge – full API (original + modal editor helpers)
+────────────────────────────────────────────────────────── */
+const { contextBridge, ipcRenderer } = require('electron')
 
-/** subscribe once, return an off() helper */
+/* helper: subscribe once, return unsub */
 const sub = (channel, cb) => {
-  const handler = (_e, ...a) => cb(...a);
-  ipcRenderer.on(channel, handler);
-  return () => ipcRenderer.removeListener(channel, handler);
-};
-
-/* minimal, safe wrapper */
-const safeIpc = {
-  on   : (ch, fn) => ipcRenderer.on(ch, fn),
-  off  : (ch, fn) => ipcRenderer.removeListener(ch, fn),
-  invoke: (ch, ...a) => ipcRenderer.invoke(ch, ...a),
-};
+  const h = (_e, ...a) => cb(...a)
+  ipcRenderer.on(channel, h)
+  return () => ipcRenderer.removeListener(channel, h)
+}
 
 contextBridge.exposeInMainWorld('electron', {
-  /* one-shot actions */
-  runCli   : (args) => ipcRenderer.invoke('run-cli',  args),
-  stopCli  : ()     => ipcRenderer.invoke('stop-cli'),
-  getConfig: ()     => ipcRenderer.invoke('getConfig'),
+  /* ---------- original one-shot actions ------------------------------ */
+  runCli   : args => ipcRenderer.invoke('run-cli', args),
+  stopCli  : ()   => ipcRenderer.invoke('stop-cli'),
+  getConfig: ()   => ipcRenderer.invoke('getConfig'),
 
-  /* realtime CLI status – return unsub functions 👇 */
-  onCliStarted: (cb) => sub('cli-started', cb),
-  onCliEnded  : (cb) => sub('cli-ended',  cb),
-  onCliExited : (cb) => sub('cli-ended',  cb),      // legacy alias
+  /* ---------- original realtime CLI hooks ---------------------------- */
+  onCliStarted: cb => sub('cli-started', cb),
+  onCliEnded  : cb => sub('cli-ended',  cb),   // legacy alias still used
+  onCliExited : cb => sub('cli-ended',  cb),
 
-  ipcRenderer : safeIpc,
-});
+  /* ---------- new helpers -------------------------------------------- */
+  openEditor : tpl => ipcRenderer.invoke('open-editor', tpl),
+  focusWindow: ()  => ipcRenderer.invoke('focus-window'),
+
+  /* ---------- low-level access if ever needed ------------------------ */
+  ipcRenderer: {
+    on    : (...a) => ipcRenderer.on   (...a),
+    off   : (...a) => ipcRenderer.removeListener(...a),
+    invoke: (...a) => ipcRenderer.invoke(...a),
+  },
+})
