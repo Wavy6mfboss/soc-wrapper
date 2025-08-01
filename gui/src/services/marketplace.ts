@@ -1,29 +1,29 @@
 /* ───────────────────────── gui/src/services/marketplace.ts
-   Public Marketplace helpers – now clones with a fresh local id
+   Marketplace helpers – clones with a fresh local UUID
 ────────────────────────────────────────────────────────── */
 import { supabase, type TemplateJSON } from '../services/templates'
-import { v4 as uuid } from 'uuid'                     // ← new
+import { v4 as uuid } from 'uuid'          // ✅ now resolved
 
-/* ---------- download / buy ------------------------------------------------ */
+/* ---------- copy public template → private row ------------------------- */
 export async function publishLocalCopy (
   remote: TemplateJSON,
   currentUserId: string,
 ): Promise<void> {
   const localRow: TemplateJSON = {
     ...remote,
-    id       : uuid(),          // brand-new local UUID so it never clashes
-    owner_id : currentUserId,
+    id       : uuid(),          // brand-new local ID
     source_id: remote.id,       // remember origin
+    owner_id : currentUserId,
     is_public: false,
   }
 
-  // Store only in Supabase (remote) so it syncs to all devices
-  const { error } = await supabase
-    .from('templates')
-    .insert([localRow])
-
+  const { error } = await supabase.from('templates').insert([localRow])
   if (error) throw error
 }
 
-/* ---------- existing helpers unchanged ----------------------------------- */
-// ... (fetchPublicTemplates, publishTemplate, etc – keep your previous code)
+/* ---------- other existing helpers stay unchanged --------------------- */
+
+/* Example: if you already had these earlier, keep them as-is -------------
+export async function fetchPublicTemplates (…) { … }
+export async function publishTemplate       (…) { … }
+-------------------------------------------------------------------------- */
