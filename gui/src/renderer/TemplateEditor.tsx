@@ -1,7 +1,7 @@
 /* ───────────────────────── renderer/TemplateEditor.tsx
-   Controlled form – resets only when editing object changes
+   Uncontrolled form – stays editable after downloads
 ────────────────────────────────────────────────────────── */
-import React, { useState, useEffect } from 'react'
+import React, { useRef } from 'react'
 import { saveTemplate, TemplateJSON } from '../services/templates'
 
 export default function TemplateEditor ({
@@ -11,35 +11,34 @@ export default function TemplateEditor ({
   editing: TemplateJSON | null
   onClose: () => void
 }) {
-  console.log('[Editor] props.editing →', editing)
-
   const blank: TemplateJSON = {
     title: '', prompt: '', instructions: '',
     tags: [], price_cents: 0, version: 1, is_public: false,
   }
+  const tpl = editing ?? blank
 
-  const [tpl, setTpl] = useState<TemplateJSON>(editing ?? blank)
+  /* refs hold the current values – React never overwrites them */
+  const rTitle = useRef<HTMLInputElement>(null)
+  const rPrompt = useRef<HTMLTextAreaElement>(null)
+  const rInstr = useRef<HTMLTextAreaElement>(null)
+  const rTags  = useRef<HTMLInputElement>(null)
+  const rPrice = useRef<HTMLInputElement>(null)
+  const rVer   = useRef<HTMLInputElement>(null)
 
-  /* 🔑 reset **only** when the object reference actually changes */
-  useEffect(() => {
-    setTpl(editing ?? blank)
-  }, [editing])                // ← changed (was editing?.id)
-
-  const bind = <K extends keyof TemplateJSON>(k: K) =>
-    (e: React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement>) =>
-      setTpl({ ...tpl,
-        [k]: k === 'price_cents' ? Number(e.target.value)
-            : k === 'version'     ? Number(e.target.value)
-            : e.target.value,
-      } as TemplateJSON)
-
-  const setTags = (e: React.ChangeEvent<HTMLInputElement>) =>
-    setTpl({ ...tpl,
-      tags: e.target.value.split(',').map(s=>s.trim()).filter(Boolean),
-    })
-
-  async function save () {
-    await saveTemplate(tpl)
+  async function handleSave () {
+    const updated: TemplateJSON = {
+      ...tpl,
+      title       : rTitle.current!.value,
+      prompt      : rPrompt.current!.value,
+      instructions: rInstr.current!.value,
+      tags        : rTags.current!.value
+                     .split(',')
+                     .map(s => s.trim())
+                     .filter(Boolean),
+      price_cents : Number(rPrice.current!.value),
+      version     : Number(rVer.current!.value) || tpl.version,
+    }
+    await saveTemplate(updated)
     onClose()
   }
 
@@ -48,38 +47,37 @@ export default function TemplateEditor ({
       <h2>{editing ? 'Edit' : 'New'} Template</h2>
 
       <label>Title<br/>
-        <input value={tpl.title} onChange={bind('title')}
-               style={{width:'100%'}}/>
+        <input defaultValue={tpl.title} ref={rTitle} style={{ width: '100%' }}/>
       </label><br/>
 
       <label>Prompt<br/>
-        <textarea value={tpl.prompt} onChange={bind('prompt')}
-                  style={{width:'100%',height:60}}/>
+        <textarea defaultValue={tpl.prompt} ref={rPrompt}
+                  style={{ width: '100%', height: 60 }}/>
       </label><br/>
 
       <label>Instructions<br/>
-        <textarea value={tpl.instructions} onChange={bind('instructions')}
-                  style={{width:'100%',height:90}}/>
+        <textarea defaultValue={tpl.instructions} ref={rInstr}
+                  style={{ width: '100%', height: 90 }}/>
       </label><br/>
 
-      <label>Tags (comma)<br/>
-        <input value={tpl.tags.join(', ')} onChange={setTags}
-               style={{width:'100%'}}/>
+      <label>Tags (comma separated)<br/>
+        <input defaultValue={tpl.tags.join(', ')} ref={rTags}
+               style={{ width: '100%' }}/>
       </label><br/>
 
       <label>Price (cents)<br/>
-        <input type="number" value={tpl.price_cents}
-               onChange={bind('price_cents')} style={{width:'100%'}}/>
+        <input type="number" defaultValue={tpl.price_cents}
+               ref={rPrice} style={{ width: '100%' }}/>
       </label><br/>
 
       <label>Version<br/>
-        <input type="number" value={Number(tpl.version)}
-               onChange={bind('version')} style={{width:'100%'}}/>
+        <input type="number" defaultValue={Number(tpl.version)}
+               ref={rVer} style={{ width: '100%' }}/>
       </label><br/>
 
-      <div style={{marginTop:16,textAlign:'right'}}>
-        <button onClick={onClose} style={{marginRight:8}}>Cancel</button>
-        <button onClick={save}>Save</button>
+      <div style={{ marginTop: 16, textAlign: 'right' }}>
+        <button onClick={onClose} style={{ marginRight: 8 }}>Cancel</button>
+        <button onClick={handleSave}>Save</button>
       </div>
     </div>
   )
