@@ -1,5 +1,5 @@
 /* ───────────────────────── renderer/Marketplace.tsx
-   Download now requires login (RLS-safe) and handles errors
+   Downloads work for both guests (localStorage) and logged-in users (Supabase)
 ────────────────────────────────────────────────────────── */
 import React, { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -8,7 +8,7 @@ import {
   publishLocalCopy,
   MarketplaceTemplate,
 } from '../services/marketplace'
-import { supabase } from '../services/templates'
+import { saveTemplate, supabase } from '../services/templates'
 
 type Sort   = 'new' | 'top'
 type Filter = 'all' | 'free' | 'paid'
@@ -19,12 +19,12 @@ export default function Marketplace () {
   const [filter,setFilter] = useState<Filter>('all')
   const [uid  , setUid  ] = useState<string|null>(null)
 
-  /* v2 auth call ------------------------------------------------------ */
+  /* v2 auth ----------------------------------------------------------- */
   useEffect(() => {
     supabase.auth.getUser().then(r => setUid(r.data.user?.id ?? null))
   }, [])
 
-  /* fetch marketplace rows ------------------------------------------- */
+  /* fetch rows -------------------------------------------------------- */
   const { data:rows=[] } = useQuery({
     queryKey:['market', sort],
     queryFn : ()=>fetchPublicTemplates(sort),
@@ -46,31 +46,38 @@ export default function Marketplace () {
 
   /* download flow ----------------------------------------------------- */
   async function download(tpl:MarketplaceTemplate){
-    if(!uid){ alert('Please log in to download'); return }
-
-    const { error } = await publishLocalCopy(tpl, uid)
-    if(error){
-      console.error('[download] Supabase error →', error)
-      alert('Download failed: '+ error.message)
-      return
+    if (uid) {
+      /* logged-in → insert via Supabase --------------------------------*/
+      const { error } = await publishLocalCopy(tpl, uid)
+      if (error) { alert('Download failed: '+error.message); return }
+      qc.invalidateQueries({ queryKey:['templates'] })
+      alert('Added to Library ✔')
+    } else {
+      /* guest → store in localStorage ---------------------------------*/
+      const copy = { ...tpl,
+        id        : undefined,          // let saveTemplate assign one
+        owner_id  : null,
+        source_id : tpl.id as any,
+        is_public : false,
+      }
+      await saveTemplate(copy)
+      qc.invalidateQueries({ queryKey:['templates'] })
+      alert('Added locally (offline) ✔')
     }
-    qc.invalidateQueries({ queryKey:['templates'] })   // refresh Library
-    alert('Added to Library ✔')
   }
 
-  /* render ------------------------------------------------------------ */
+  /* UI ----------------------------------------------------------------*/
   return (
     <div style={{maxWidth:900}}>
       <h1>Marketplace</h1>
 
-      {/* chips */}
       <div style={{marginBottom:16}}>
-        {chip('Newest',    sort==='new', ()=>setSort('new'))}
-        {chip('Top Rated', sort==='top', ()=>setSort('top'))}
+        {chip('Newest',sort==='new',()=>setSort('new'))}
+        {chip('Top Rated',sort==='top',()=>setSort('top'))}
         {' | '}
-        {chip('All',  filter==='all',  ()=>setFilter('all'))}
-        {chip('Free', filter==='free', ()=>setFilter('free'))}
-        {chip('Paid', filter==='paid', ()=>setFilter('paid'))}
+        {chip('All',filter==='all',()=>setFilter('all'))}
+        {chip('Free',filter==='free',()=>setFilter('free'))}
+        {chip('Paid',filter==='paid',()=>setFilter('paid'))}
       </div>
 
       {list.length===0 ? <p style={{fontStyle:'italic'}}>No templates.</p>
