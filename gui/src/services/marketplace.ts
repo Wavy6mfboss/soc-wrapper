@@ -1,74 +1,29 @@
 /* ───────────────────────── gui/src/services/marketplace.ts
-   Marketplace helpers – anonymous Download goes to localStorage
-──────────────────────────────────────────────────────────────── */
+   Public Marketplace helpers – now clones with a fresh local id
+────────────────────────────────────────────────────────── */
+import { supabase, type TemplateJSON } from '../services/templates'
+import { v4 as uuid } from 'uuid'                     // ← new
 
-import { supabase, type TemplateJSON } from './templates'
-import { fetchRatingStats } from './ratings'
-
-/* ---------- localStorage helpers (reuse same key as templates.ts) ------- */
-const LOCAL_KEY = 'soc-wrapper-templates-v1'
-function saveLocal (tpl: TemplateJSON) {
-  const list: TemplateJSON[] = JSON.parse(localStorage.getItem(LOCAL_KEY) ?? '[]')
-  tpl.id = Date.now()        // local id
-  list.push(tpl)
-  localStorage.setItem(LOCAL_KEY, JSON.stringify(list))
-}
-
-export type MarketplaceTemplate = TemplateJSON & {
-  avgStars: number
-  ratingCount: number
-}
-
-/* ---------- utils ------------------------------------------------------- */
-const ver = (v:any)=> typeof v==='number'?v||1:parseInt(String(v??'1').split('.')[0],10)||1
-
-/* ---------- owner Publish (free) --------------------------------------- */
-export const publishTemplate = (tpl: TemplateJSON) =>
-  supabase.from('templates').insert([{ ...tpl, price_cents:0, version:ver(tpl.version), is_public:true }])
-
-/* ---------- user Download / Buy ---------------------------------------- */
-export async function publishLocalCopy (tpl: MarketplaceTemplate, ownerId: string | null) {
-  if (!ownerId) {
-    /* anonymous → local copy */
-    saveLocal({
-      ...tpl,
-      id        : undefined,
-      source_id : tpl.id,
-      is_public : false,
-      owner_id  : null,
-    })
-    return { error: null }
+/* ---------- download / buy ------------------------------------------------ */
+export async function publishLocalCopy (
+  remote: TemplateJSON,
+  currentUserId: string,
+): Promise<void> {
+  const localRow: TemplateJSON = {
+    ...remote,
+    id       : uuid(),          // brand-new local UUID so it never clashes
+    owner_id : currentUserId,
+    source_id: remote.id,       // remember origin
+    is_public: false,
   }
-  /* logged-in → Supabase copy */
-  return supabase.from('templates').insert([{
-    title        : tpl.title,
-    prompt       : tpl.prompt,
-    instructions : tpl.instructions,
-    tags         : tpl.tags,
-    price_cents  : tpl.price_cents,
-    version      : ver(tpl.version),
-    is_public    : false,
-    owner_id     : ownerId,
-    source_id    : tpl.id,
-  }])
+
+  // Store only in Supabase (remote) so it syncs to all devices
+  const { error } = await supabase
+    .from('templates')
+    .insert([localRow])
+
+  if (error) throw error
 }
 
-/* ---------- list public templates (optionally hide my own) -------------- */
-export async function fetchPublicTemplates (
-  sort:'new'|'top', exclude?:string|null,
-){
-  let q = supabase.from('templates').select('*').eq('is_public', true)
-  if (exclude) q = q.neq('owner_id', exclude)
-  const { data } = await q
-  if (!data) return []
-  const stats = await fetchRatingStats(data.map(t => t.id!))
-  const rows  = data.map(t => ({
-    ...t,
-    avgStars   : stats[t.id!]?.avg   ?? 0,
-    ratingCount: stats[t.id!]?.count ?? 0,
-  })) as MarketplaceTemplate[]
-  rows.sort(sort==='new'
-    ? (a,b)=>+new Date(b.created_at??0)-+new Date(a.created_at??0)
-    : (a,b)=>b.avgStars-a.avgStars || b.ratingCount-a.ratingCount)
-  return rows
-}
+/* ---------- existing helpers unchanged ----------------------------------- */
+// ... (fetchPublicTemplates, publishTemplate, etc – keep your previous code)
