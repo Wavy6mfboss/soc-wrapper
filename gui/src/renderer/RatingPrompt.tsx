@@ -1,5 +1,5 @@
 /* ───────────────────────── renderer/RatingPrompt.tsx
-   Rating modal – refetches all Marketplace queries
+   Rating modal – refetches all active Marketplace queries
 ────────────────────────────────────────────────────────── */
 import React, { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -9,22 +9,19 @@ import { submitRating } from '@/services/ratings'
 export default function RatingPrompt ({
   templateId,
   onClose,
-}: {
-  templateId: string
-  onClose: () => void
-}) {
+}: { templateId: string; onClose: () => void }) {
   const qc = useQueryClient()
-  const [stars,   setStars]   = useState(0)
+  const [stars, setStars]     = useState(0)
   const [comment, setComment] = useState('')
-  const [busy,    setBusy]    = useState(false)
+  const [busy, setBusy]       = useState(false)
 
   async function handleSubmit () {
     if (!stars) return
     setBusy(true)
     try {
       await submitRating(templateId, stars, comment)
-      /* refresh every Marketplace query (['market', ...]) */
-      qc.invalidateQueries({ queryKey: ['market'], exact: false })
+      /* Actively refetch every Marketplace list (['market', ...]) */
+      await qc.refetchQueries({ queryKey: ['market'], exact: false, type: 'active' })
     } finally {
       onClose()
     }

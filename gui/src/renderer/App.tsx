@@ -1,5 +1,5 @@
 /* ───────────────────────── renderer/App.tsx
-   Router – Home | Library | Marketplace | EditorWindow
+   Views + concise CLI banner
 ────────────────────────────────────────────────────────── */
 import React, { useEffect, useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -15,36 +15,52 @@ const qc = new QueryClient()
 type View = 'home' | 'library' | 'market' | 'editor'
 
 export default function App () {
-  /* initial view: if hash is #/editor (child window) show editor */
+  /* ---------- routing ---------------------------------------------- */
   const [view, setView] = useState<View>(
     window.location.hash === '#/editor' ? 'editor' : 'home'
   )
-
-  /* child window keeps hash #/editor; main window changes via nav */
   useEffect(() => {
-    const onHash = () => {
-      if (window.location.hash === '#/editor') setView('editor')
-    }
-    window.addEventListener('hashchange', onHash)
-    return () => window.removeEventListener('hashchange', onHash)
+    const h = () => { if (window.location.hash === '#/editor') setView('editor') }
+    window.addEventListener('hashchange', h)
+    return () => window.removeEventListener('hashchange', h)
+  }, [])
+
+  /* ---------- CLI banner ------------------------------------------- */
+  const [running, setRunning] = useState(false)
+  useEffect(() => {
+    const offStart = window.electron.onCliStarted(() => setRunning(true))
+    const offEnd   = window.electron.onCliEnded(()  => setRunning(false))
+    return () => { offStart(); offEnd() }
   }, [])
 
   const run = (t: TemplateJSON) =>
     window.electron.runCli(['--prompt', t.prompt])
 
+  /* ---------- UI --------------------------------------------------- */
   return (
     <QueryClientProvider client={qc}>
       <ErrorBoundary>
         {view === 'editor' ? (
-          <EditorWindow />                       {/* only the editor UI */}
+          <EditorWindow />
         ) : (
           <div style={{ padding: 16, fontFamily: 'sans-serif' }}>
+            {/* CLI running banner */}
+            {running && (
+              <div style={{
+                background:'#ffeeaa', padding:'6px 12px', marginBottom:16,
+                display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span>🚀 Automation running…</span>
+                <button onClick={()=>window.electron.stopCli()}>Stop</button>
+              </div>
+            )}
+
+            {/* nav */}
             <nav style={{ marginBottom: 24 }}>
-              <a onClick={() => setView('home')}
+              <a onClick={()=>setView('home')}
                  style={{ marginRight:16,cursor:'pointer' }}>Home</a>
-              <a onClick={() => setView('library')}
+              <a onClick={()=>setView('library')}
                  style={{ marginRight:16,cursor:'pointer' }}>Library</a>
-              <a onClick={() => setView('market')}
+              <a onClick={()=>setView('market')}
                  style={{ cursor:'pointer' }}>Marketplace</a>
             </nav>
 
