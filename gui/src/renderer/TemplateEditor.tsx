@@ -1,5 +1,5 @@
 /* ───────────────────────── renderer/TemplateEditor.tsx
-   Controlled form – always editable, resets on prop change
+   Controlled form – resets only when editing object changes
 ────────────────────────────────────────────────────────── */
 import React, { useState, useEffect } from 'react'
 import { saveTemplate, TemplateJSON } from '../services/templates'
@@ -11,20 +11,21 @@ export default function TemplateEditor ({
   editing: TemplateJSON | null
   onClose: () => void
 }) {
+  console.log('[Editor] props.editing →', editing)
+
   const blank: TemplateJSON = {
     title: '', prompt: '', instructions: '',
     tags: [], price_cents: 0, version: 1, is_public: false,
   }
 
-  /* Controlled state */
   const [tpl, setTpl] = useState<TemplateJSON>(editing ?? blank)
 
-  /* Reset the form any time editing.id changes */
+  /* 🔑 reset **only** when the object reference actually changes */
   useEffect(() => {
     setTpl(editing ?? blank)
-  }, [editing?.id])
+  }, [editing])                // ← changed (was editing?.id)
 
-  const set = <K extends keyof TemplateJSON>(k: K) =>
+  const bind = <K extends keyof TemplateJSON>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement>) =>
       setTpl({ ...tpl,
         [k]: k === 'price_cents' ? Number(e.target.value)
@@ -47,31 +48,33 @@ export default function TemplateEditor ({
       <h2>{editing ? 'Edit' : 'New'} Template</h2>
 
       <label>Title<br/>
-        <input value={tpl.title} onChange={set('title')} style={{width:'100%'}}/>
+        <input value={tpl.title} onChange={bind('title')}
+               style={{width:'100%'}}/>
       </label><br/>
 
       <label>Prompt<br/>
-        <textarea value={tpl.prompt} onChange={set('prompt')}
+        <textarea value={tpl.prompt} onChange={bind('prompt')}
                   style={{width:'100%',height:60}}/>
       </label><br/>
 
       <label>Instructions<br/>
-        <textarea value={tpl.instructions} onChange={set('instructions')}
+        <textarea value={tpl.instructions} onChange={bind('instructions')}
                   style={{width:'100%',height:90}}/>
       </label><br/>
 
       <label>Tags (comma)<br/>
-        <input value={tpl.tags.join(', ')} onChange={setTags} style={{width:'100%'}}/>
+        <input value={tpl.tags.join(', ')} onChange={setTags}
+               style={{width:'100%'}}/>
       </label><br/>
 
       <label>Price (cents)<br/>
         <input type="number" value={tpl.price_cents}
-               onChange={set('price_cents')} style={{width:'100%'}}/>
+               onChange={bind('price_cents')} style={{width:'100%'}}/>
       </label><br/>
 
       <label>Version<br/>
         <input type="number" value={Number(tpl.version)}
-               onChange={set('version')} style={{width:'100%'}}/>
+               onChange={bind('version')} style={{width:'100%'}}/>
       </label><br/>
 
       <div style={{marginTop:16,textAlign:'right'}}>
