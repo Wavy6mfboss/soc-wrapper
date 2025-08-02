@@ -1,69 +1,73 @@
 /* ───────────────────────── electron-main.cjs
-   Main process – CLI + editor window launcher
+   Main-process bootstrap
 ────────────────────────────────────────────────────────── */
 const { app, BrowserWindow, ipcMain } = require('electron')
-const path = require('node:path')
+const path  = require('node:path')
 const { spawn } = require('node:child_process')
 
-/* ---------- CLI runner ------------------------------ */
-let child = null
-function launchCli (args = []) {
-  if (child) return
-  const exe = path.join(__dirname, 'dist', 'operate_runner.exe')
-  child = spawn(exe, args, { stdio: 'inherit' })
-  mainWindow.webContents.send('cli-started')
-  child.on('exit', code => {
-    mainWindow.webContents.send('cli-ended', code)
-    child = null
-  })
-}
-function killCli () { try { child?.kill() } catch (_) {} }
-
-/* ---------- main window ----------------------------- */
-let mainWindow
-function createWindow () {
-  mainWindow = new BrowserWindow({
-    width:1024, height:768,
-    webPreferences:{
-      preload: path.join(__dirname,'electron-preload.cjs'),
-      contextIsolation:true,
-      nodeIntegration:false,
-    },
-  })
-  if (process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
-    mainWindow.webContents.openDevTools()
-  } else {
-    mainWindow.loadFile(path.join(__dirname,'..','dist','index.html'))
-  }
-}
-app.whenReady().then(createWindow)
-
-/* ---------- editor popup ---------------------------- */
-function launchEditor (tpl) {
-  const hash = tpl ? '#'+encodeURIComponent(JSON.stringify(tpl)) : ''
-  const url  = (process.env.VITE_DEV_SERVER_URL ??
-               `file://${path.join(__dirname,'..','dist','index.html')}`)
-               + `#` + '/editor' + hash
-
+/* ------------------------------------------------ window helpers */
+function createMainWindow () {
   const win = new BrowserWindow({
-    width:740, height:760, parent:mainWindow, modal:false,
+    width:1024,height:768,
     webPreferences:{
-      preload: path.join(__dirname,'electron-preload.cjs'),
-      contextIsolation:true,
-      nodeIntegration:false,
+      preload : path.join(__dirname,'electron-preload.cjs'),
+      contextIsolation:true,nodeIntegration:false,
+      nativeWindowOpen:true,      // required for child windows
     },
   })
+  const url = process.env.VITE_DEV_SERVER_URL
+    ? process.env.VITE_DEV_SERVER_URL
+    : `file://${path.join(__dirname,'..','dist','index.html')}`
   win.loadURL(url)
+  if (process.env.VITE_DEV_SERVER_URL) win.webContents.openDevTools()
+  return win
 }
 
-/* ---------- IPC handlers ---------------------------- */
-ipcMain.handle('run-cli',    (_e,a)=>launchCli(a))
-ipcMain.handle('stop-cli',   ()=>killCli())
-ipcMain.handle('getConfig',  ()=>({ userData:app.getPath('userData'),
-                                    env:process.env.NODE_ENV??'production'}))
-ipcMain.handle('open-editor',(_e,tpl)=>launchEditor(tpl))
+function createEditorWindow (tplJson) {
+  const win = new BrowserWindow({
+    width:740,height:760,parent:mainWindow,
+    webPreferences:{
+      preload : path.join(__dirname,'electron-preload.cjs'),
+      contextIsolation:true,nodeIntegration:false,
+    },
+  })
+  const hash = tplJson ? '#/editor/'+encodeURIComponent(JSON.stringify(tplJson)) : '#/editor'
+  const base = process.env.VITE_DEV_SERVER_URL
+    ? process.env.VITE_DEV_SERVER_URL
+    : `file://${path.join(__dirname,'..','dist','index.html')}`
+  win.loadURL(base + hash)
+}
 
-ipcMain.on('template-saved', ()=>mainWindow.webContents.send('template-saved'))
+/* ------------------------------------------------ CLI runner */
+let child=null
+function launchCli(args=[]){
+  if(child) return
+  const exe = path.join(__dirname,'dist','operate_runner.exe')
+  child = spawn(exe,args,{stdio:'ignore'})
+  mainWindow?.webContents.send('cli-started')
+  child.on('exit',code=>{
+    mainWindow?.webContents.send('cli-ended',code)
+    child=null
+  })
+}
+function killCli(){ if(child) try{ child.kill() }catch{} }
 
-app.on('window-all-closed',()=>{ if (process.platform!=='darwin') app.quit() })
+/* ------------------------------------------------ main entry */
+let mainWindow=null
+app.whenReady().then(()=>{ mainWindow=createMainWindow() })
+
+/* ------------------------------------------------ IPC routes */
+ipcMain.handle('run-cli',(_e,a)=>launchCli(a))
+ipcMain.handle('stop-cli',()=>killCli())
+ipcMain.handle('getConfig',()=>({
+  env:process.env.NODE_ENV??'production',
+  userData:app.getPath('userData'),
+}))
+ipcMain.handle('open-editor',(_e,tpl)=>createEditorWindow(tpl))
+
+/* relay “template-saved” from any renderer back to mainWindow */
+ipcMain.on('template-saved',(_e)=>{
+  mainWindow?.webContents.send('template-saved')
+})
+
+app.on('window-all-closed',()=>{ if(process.platform!=='darwin') app.quit() })
