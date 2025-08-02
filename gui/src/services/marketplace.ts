@@ -1,73 +1,71 @@
 /* ───────────────────────── gui/src/services/marketplace.ts
-   Public Marketplace helpers
-────────────────────────────────────────────────────────── */
-import { supabase, type TemplateJSON } from '../services/templates'
+   Public-template helpers – with fresh rating aggregates
+────────────────────────────────────────────────────────────────── */
+import { supabase, type TemplateJSON } from './templates'
 
-/* ---------- 1. publish your own template ------------------------------ */
-export async function publishTemplate (
-  tpl: TemplateJSON,
-): Promise<{ error: Error | null }> {
-  const { error } = await supabase
-    .from('templates')
-    .insert([{
-      ...tpl,
-      is_public : true,
-      price_cents: 0,
-      version   : typeof tpl.version === 'number'
-        ? tpl.version
-        : Number(String(tpl.version).split('.')[0]) || 1,
-    }])
-  return { error }
-}
+/* ---------- extra helper ---------------------------------------------- */
+async function fetchRatingStats (ids: (number | string)[]) {
+  if (!ids.length) return {}
 
-/* ---------- 2. clone OR reuse one local copy per source --------------- */
-export async function publishLocalCopy (
-  remote: TemplateJSON,
-  currentUserId: string,
-): Promise<void> {
-  /* already have a private copy for this source_id? */
-  const { data: existing } = await supabase
-    .from('templates')
-    .select('*')
-    .eq('owner_id', currentUserId)
-    .eq('source_id', remote.id)
-    .limit(1)
-    .maybeSingle()
+  const { data, error } = await supabase
+    .from('ratings')
+    .select('template_id, stars')
+    .in('template_id', ids)
 
-  if (existing) return               // user already owns it
-
-  /* otherwise insert new row with fresh UUID */
-  const localRow: TemplateJSON = {
-    ...remote,
-    id       : crypto.randomUUID(),
-    source_id: remote.id,
-    owner_id : currentUserId,
-    is_public: false,
+  if (error) {
+    console.error('[marketplace] rating stats error →', error)
+    return {}
   }
 
-  const { error } = await supabase.from('templates').insert([localRow])
-  if (error) throw error
+  /* reduce to { id: { count, avg } } */
+  const out: Record<string, { count: number; avg: number }> = {}
+  data!.forEach(({ template_id, stars }) => {
+    const key = String(template_id)
+    const obj = out[key] ?? (out[key] = { count: 0, avg: 0 })
+    obj.count += 1
+    obj.avg = ((obj.avg * (obj.count - 1)) + stars) / obj.count
+  })
+  return out
 }
 
-/* ---------- 3. fetch public templates --------------------------------- */
+/* ---------- types ------------------------------------------------------ */
+export type MarketplaceTemplate = TemplateJSON & {
+  avgStars:    number
+  ratingCount: number
+}
+
+/* ---------- API -------------------------------------------------------- */
 export async function fetchPublicTemplates (
   sort: 'new' | 'top' = 'new',
-): Promise<TemplateJSON[]> {
+): Promise<MarketplaceTemplate[]> {
+  /* ① fetch rows */
   const { data, error } = await supabase
     .from('templates')
     .select('*')
     .eq('is_public', true)
 
   if (error) {
-    console.error('[marketplace] fetch error →', error)
+    console.error('[marketplace] fetch templates error →', error)
     return []
   }
 
   const rows = data ?? []
-  if (sort === 'new') {
-    rows.sort((a, b) =>
-      new Date(b.created_at ?? '').getTime() -
-      new Date(a.created_at ?? '').getTime())
-  }
-  return rows
+
+  /* ② fetch live rating aggregates */
+  const stats = await fetchRatingStats(rows.map(r => r.id!))
+
+  /* ③ enrich rows */
+  const enriched: MarketplaceTemplate[] = rows.map(r => ({
+    ...r,
+    avgStars:    stats[String(r.id)]?.avg   ?? 0,
+    ratingCount: stats[String(r.id)]?.count ?? 0,
+  }))
+
+  /* ④ sort client-side */
+  enriched.sort(sort === 'top'
+    ? (a, b) => b.avgStars - a.avgStars || b.ratingCount - a.ratingCount
+    : (a, b) => new Date(b.created_at ?? '').getTime()
+              - new Date(a.created_at ?? '').getTime())
+
+  return enriched
 }
