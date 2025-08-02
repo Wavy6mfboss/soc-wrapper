@@ -1,5 +1,5 @@
 /* ───────────────────────── renderer/Library.tsx
-   Run | Edit | Delete + Rating modal after 2 runs
+   My Library – run-counter + single-rating guard
 ────────────────────────────────────────────────────────── */
 import React, { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -8,76 +8,126 @@ import {
   deleteTemplate,
   TemplateJSON,
   supabase,
-} from '../services/templates'
-import RatingPrompt from './RatingPrompt'
+} from '@/services/templates'
+import PublishDialog  from './PublishDialog'
+import RatingPrompt   from './RatingPrompt'
+import { hasUserRated } from '@/services/ratings'
 
-export default function Library ({ onRun }:{ onRun:(t:TemplateJSON)=>void }) {
-  const qc   = useQueryClient()
-  const { data:rows=[] } = useQuery({ queryKey:['templates'], queryFn: fetchTemplates })
+/* ---------- props --------------------------------------- */
+interface Props {
+  onRun : (tpl: TemplateJSON) => Promise<void> | void
+  onEdit: (tpl: TemplateJSON | null) => void
+}
 
-  /* current user (may be null) */
-  const [uid,setUid] = useState<string|null>(null)
-  useEffect(()=>{ supabase.auth.getUser().then(r=>setUid(r.data.user?.id??null)) },[])
+/* ---------- local run counter --------------------------- */
+const CNT_KEY = 'soc-run-counts-v1'
+function bumpRun (id: string) {
+  const m = JSON.parse(localStorage.getItem(CNT_KEY) ?? '{}')
+  m[id] = (m[id] ?? 0) + 1
+  localStorage.setItem(CNT_KEY, JSON.stringify(m))
+  return m[id]
+}
 
-  /* refresh whenever editor saves */
-  useEffect(()=> window.electron.onTemplateSaved(
-    () => qc.invalidateQueries({ queryKey:['templates'] })
-  ), [])
+/* ---------- component ----------------------------------- */
+export default function Library ({ onRun, onEdit }: Props) {
+  const qc = useQueryClient()
 
-  /* local run-counter → rating modal */
-  const KEY = 'soc-run-counts-v1'
-  const bump = (id:string)=>
-    { const m=JSON.parse(localStorage.getItem(KEY)||'{}'); m[id]=(m[id]??0)+1;
-      localStorage.setItem(KEY,JSON.stringify(m)); return m[id] }
+  /* templates list */
+  const { data: templates = [], isLoading, refetch } = useQuery({
+    queryKey: ['templates'],
+    queryFn : fetchTemplates,
+  })
 
-  const [rate,setRate] = useState<string|null>(null)
+  /* auth */
+  const [uid, setUid] = useState<string | null | undefined>(undefined)
+  useEffect(() => {
+    supabase.auth.getUser().then(r => setUid(r.data.user?.id ?? null))
+  }, [])
 
-  async function handleRun(t:TemplateJSON){
-    await onRun(t)
-    const orig = (t.source_id as string|undefined) ?? (t.id as string)
-    if(!orig) return
+  /* local sections */
+  const mine       = templates.filter(t => (t.owner_id ?? null) === uid)
+  const created    = mine.filter(t => !t.source_id)
+  const downloads  = mine.filter(t =>  t.source_id)
 
-    const isOwner = t.owner_id && uid && t.owner_id === uid
-    if(isOwner) return
+  /* dialogs */
+  const [pub,  setPub ] = useState<TemplateJSON | null>(null)
+  const [rate, setRate] = useState<string | null>(null) // templateId to rate
 
-    if(bump(orig) >= 2) setRate(orig)
+  /* run handler with rating logic */
+  async function handleRun (tpl: TemplateJSON) {
+    await onRun(tpl)
+    const id = String(tpl.source_id ?? tpl.id!)
+    const count = bumpRun(id)
+
+    if (count === 2 && !(await hasUserRated(id))) setRate(id)
   }
 
-  async function handleDelete(t:TemplateJSON){
-    await deleteTemplate(t)
-    qc.invalidateQueries({ queryKey:['templates'] })
+  /* helpers */
+  const price = (c: number) => (c ? `$${(c / 100).toFixed(2)}` : 'Free')
+  async function del (tpl: TemplateJSON) {
+    await deleteTemplate(tpl)
+    void refetch();               // refresh list
   }
 
-  /* split lists */
-  const created  = rows.filter(t=>!t.source_id)
-  const downloads= rows.filter(t=> t.source_id)
+  /* row renderer */
+  function Row (t: TemplateJSON, badge: string) {
+    return (
+      <tr key={t.id ?? t.title}>
+        <td>
+          <span style={{
+            background:'#eee',fontSize:11,padding:'2px 6px',
+            borderRadius:4,marginRight:6,textTransform:'uppercase',
+          }}>{badge}</span>
+          {t.title}
+        </td>
+        <td>{t.tags.join(', ')}</td>
+        <td>{price(t.price_cents)}</td>
+        <td>
+          <button onClick={() => handleRun(t)}>Run</button>{' '}
+          <button onClick={() => onEdit(t)}>Edit</button>{' '}
+          <button onClick={() => del(t)}>Delete</button>{' '}
+          {badge === 'created' && (
+            <button onClick={() => setPub(t)}>Publish</button>
+          )}
+        </td>
+      </tr>
+    )
+  }
 
-  const price = (c:number)=> c?`$${(c/100).toFixed(2)}`:'Free'
-  const Row = (t:TemplateJSON,label:string)=>(<tr key={t.id}>
-    <td>{label==='created'?'📝':'⬇️'} {t.title}</td>
-    <td>{price(t.price_cents)}</td>
-    <td>
-      <button onClick={()=>handleRun(t)}>Run</button>{' '}
-      <button onClick={()=>window.electron.openEditor(t)}>Edit</button>{' '}
-      <button onClick={()=>handleDelete(t)}>Delete</button>
-    </td>
-  </tr>)
+  if (isLoading || uid === undefined) return <p>Loading…</p>
 
   return (
-    <div style={{maxWidth:900}}>
+    <div style={{ maxWidth: 900, paddingBottom: 48 }}>
       <h1>My Library</h1>
 
+      <button onClick={() => onEdit(null)} style={{ margin: '16px 0' }}>
+        + New Template
+      </button>
+
       <h3>Created</h3>
-      <table style={{borderSpacing:8}}>
-        <tbody>{created.map(t=>Row(t,'created'))}</tbody>
+      <table style={{ borderSpacing: 8 }}>
+        <thead><tr><th>Title</th><th>Tags</th><th>Price</th><th /></tr></thead>
+        <tbody>{created.map(t => Row(t, 'created'))}</tbody>
       </table>
 
-      <h3 style={{marginTop:32}}>Downloads</h3>
-      <table style={{borderSpacing:8}}>
-        <tbody>{downloads.map(t=>Row(t,'downloaded'))}</tbody>
-      </table>
+      {downloads.length > 0 && (
+        <>
+          <hr style={{ margin: '32px 0' }} />
+          <h3>Downloads</h3>
+          <table style={{ borderSpacing: 8 }}>
+            <thead><tr><th>Title</th><th>Tags</th><th>Price</th><th /></tr></thead>
+            <tbody>{downloads.map(t => Row(t, 'downloaded'))}</tbody>
+          </table>
+        </>
+      )}
 
-      {rate && <RatingPrompt templateId={rate} onClose={()=>setRate(null)} />}
+      {pub  && <PublishDialog tpl={pub}    onClose={() => setPub(null)} />}
+      {rate && (
+        <RatingPrompt
+          templateId={rate}
+          onClose={() => setRate(null)}
+        />
+      )}
     </div>
   )
 }

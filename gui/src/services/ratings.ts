@@ -1,53 +1,34 @@
 /* ───────────────────────── gui/src/services/ratings.ts
-   Ratings API helpers – Sprint-10
-────────────────────────────────────────────────────────────────── */
+   Ratings API helpers – one-per-user constraint
+────────────────────────────────────────────────────────── */
+import { supabase } from './templates'
 
-import { supabase } from './templates'   // ← re-use existing singleton
-
-export type RatingStats = { avg: number; count: number }
-
-/**
- * Submit a rating (1-5 stars, optional comment).
- * Supabase RLS allows anonymous INSERT.
- */
+/* ---- write (INSERT … ON CONFLICT) ---------------------- */
 export async function submitRating (
-  templateId: number,
-  stars: number,
-  comment: string = '',
-): Promise<void> {
-  const { error } = await supabase.from('ratings').insert({
-    template_id: templateId,
-    stars,
-    comment,
-  })
+  templateId: string | number,
+  stars     : number,
+  comment   : string,
+) {
+  /* server-side uniqueness: (template_id,user_id) */
+  const { error } = await supabase
+    .from('ratings')
+    .upsert(
+      { template_id: templateId, stars, comment },
+      { onConflict: 'template_id,user_id' },
+    )
   if (error) throw error
 }
 
-/**
- * Return { [templateId]: { avg, count } } for the supplied IDs.
- */
-export async function fetchRatingStats (
-  templateIds: number[],
-): Promise<Record<number, RatingStats>> {
-  if (!templateIds.length) return {}
-
-  const { data, error } = await supabase
+/* ---- read: has current user already rated? -------------- */
+export async function hasUserRated (
+  templateId: string | number,
+): Promise<boolean> {
+  const uid = (await supabase.auth.getUser()).data.user?.id
+  if (!uid) return false
+  const { count } = await supabase
     .from('ratings')
-    .select('template_id, stars')
-    .in('template_id', templateIds)
-
-  if (error) throw error
-
-  const buckets: Record<number, { total: number; count: number }> = {}
-  data!.forEach(({ template_id, stars }) => {
-    if (!buckets[template_id]) buckets[template_id] = { total: 0, count: 0 }
-    buckets[template_id].total += stars
-    buckets[template_id].count += 1
-  })
-
-  const stats: Record<number, RatingStats> = {}
-  for (const [id, { total, count }] of Object.entries(buckets)) {
-    stats[+id] = { avg: +(total / count).toFixed(1), count }
-  }
-  return stats
+    .select('*', { count: 'exact', head: true })
+    .eq('template_id', templateId)
+    .eq('user_id', uid)
+  return (count ?? 0) > 0
 }
