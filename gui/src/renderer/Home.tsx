@@ -1,52 +1,41 @@
 /* ───────────────────────── renderer/Home.tsx
-   Simple landing page – no direct ipcRenderer pokes
+   Safe when window.electron is absent
 ────────────────────────────────────────────────────────── */
 import React, { useEffect, useState } from 'react'
 
-interface Config {
-  env:      string
-  userData: string
-}
+interface Cfg{ env:string; userData:string }
 
-export default function Home () {
-  const [cfg, setCfg] = useState<Config | null>(null)
-  const [savedTick, setSaved] = useState(0)
+/* helper: run only if preload exists */
+const elec = <T,>(fn:(e:any)=>T, fallback:T)=>(
+  typeof window!=='undefined' && (window as any).electron
+    ? fn((window as any).electron)
+    : fallback
+)
 
-  /* ask main-process for some info & listen for template-saved */
-  useEffect(() => {
-    let off = () => {}
-    ;(async () => {
-      try {
-        const c = await window.electron.getConfig()
-        setCfg(c)
-      } catch (e) {
-        /* ignore – preload not ready in unit tests */
-      }
-      off = window.electron.onTemplateSaved(() => setSaved(x => x + 1))
+export default function Home(){
+  const[cfg,setCfg]=useState<Cfg|null>(null)
+  const[saved,setSaved]=useState(0)
+
+  useEffect(()=>{
+    let off=()=>{}
+    ;(async()=>{
+      const c = await elec(e=>e.getConfig(), null)
+      if(c) setCfg(c)
+      off = elec(e=>e.onTemplateSaved(()=>setSaved(x=>x+1)), ()=>{})
     })()
-    return () => off()
-  }, [])
+    return ()=>off()
+  },[])
 
   return (
     <div>
       <h1>Welcome to SOC-Wrapper</h1>
-
       {cfg && (
-        <p style={{ fontSize: 12, color: '#666' }}>
+        <p style={{fontSize:12,color:'#666'}}>
           mode: <b>{cfg.env}</b> • data dir: {cfg.userData}
         </p>
       )}
-
-      {savedTick > 0 && (
-        <p style={{ color: '#090' }}>
-          ✔ Template saved ({savedTick})
-        </p>
-      )}
-
-      <p>
-        Use <em>Library</em> to create automations, or visit the{' '}
-        <em>Marketplace</em> to download ready-made ones.
-      </p>
+      {saved>0 && <p style={{color:'#090'}}>✔ Template saved ({saved})</p>}
+      <p>Create automations in <em>Library</em> or browse the <em>Marketplace</em>.</p>
     </div>
   )
 }
