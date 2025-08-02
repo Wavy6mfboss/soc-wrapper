@@ -1,5 +1,5 @@
 /* ───────────────────────── renderer/App.tsx
-   Navigation + CLI banner + editor popup
+   Root shell + dedicated #/editor page
 ────────────────────────────────────────────────────────── */
 import React, { useEffect, useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -7,40 +7,49 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import Home        from './Home'
 import Library     from './Library'
 import Marketplace from './Marketplace'
+import TemplateEditor from './TemplateEditor'
 import ErrorBoundary from './ErrorBoundary'
 import { TemplateJSON } from '../services/templates'
 
+/* ───────────── helpers */
 const qc = new QueryClient()
-type View = 'home' | 'library' | 'market'
 
-/* helper – run only when preload injected */
+/** shorthands for optional electron-preload API */
 const elec = <T>(fn: (e: any) => T, fallback?: T) =>
   typeof window !== 'undefined' && (window as any).electron
     ? fn((window as any).electron)
     : (fallback as T)
 
-/* ------------------------------------------------ open editor */
-function openEditor (tpl: TemplateJSON | null) {
-  elec(e => {
-    if (e.openEditor) {
-      /* electron path */
-      e.openEditor(tpl)
-    } else {
-      /* vite-preview (plain browser) fallback */
-      const hash = tpl
-        ? '#/editor/' + encodeURIComponent(JSON.stringify(tpl))
-        : '#/editor'
-      window.open(
-        `${location.origin}/${hash}`,
-        '_blank',
-        'popup=yes,width=740,height=760,noopener,noreferrer'
-      )
-    }
-  })
+/* ------------------------------------------------ editor-only page */
+function maybeRenderEditorOnly () {
+  const hash = typeof window === 'undefined' ? ''
+             : window.location.hash.replace(/^#\/editor\/?/, '')
+
+  if (!window.location.hash.startsWith('#/editor')) return null
+
+  /* parse encoded JSON if present */
+  let tpl: TemplateJSON | null = null
+  if (hash) {
+    try { tpl = JSON.parse(decodeURIComponent(hash)) }
+    catch { /* ignore */ }
+  }
+
+  const close = () => window.close()
+
+  return (
+    <QueryClientProvider client={qc}>
+      <TemplateEditor editing={tpl} onClose={close} />
+    </QueryClientProvider>
+  )
 }
 
-/* ------------------------------------------------ main component */
+/* ------------------------------------------------ normal shell */
 export default function App () {
+  /* standalone editor tab? */
+  const standalone = maybeRenderEditorOnly()
+  if (standalone) return standalone
+
+  type View = 'home' | 'library' | 'market'
   const [view, setView]   = useState<View>('home')
   const [running, setRun] = useState(false)
 
@@ -54,13 +63,28 @@ export default function App () {
     return () => { off1(); off2() }
   }, [])
 
+  /* open editor in popup (electron or browser) */
+  const openEditor = (tpl: TemplateJSON | null) =>
+    elec(e => {
+      if (e.openEditor) return e.openEditor(tpl)     // electron path
+      const hash = tpl
+        ? '#/editor/' + encodeURIComponent(JSON.stringify(tpl))
+        : '#/editor'
+      window.open(
+        `${location.origin}/${hash}`,
+        '_blank',
+        'popup=yes,width=740,height=760,noopener,noreferrer'
+      )
+    })
+
   const runAuto = (tpl: TemplateJSON) =>
     elec(e => e.runCli && e.runCli(['--prompt', tpl.prompt]))
 
+  /* ------------- UI */
   return (
     <QueryClientProvider client={qc}>
       <ErrorBoundary>
-        {/* banner */}
+        {/* CLI banner */}
         {running && (
           <div style={{
             background:'#ffeeaa',padding:'6px 12px',marginBottom:16,
@@ -73,17 +97,18 @@ export default function App () {
           </div>
         )}
 
-        {/* nav + routes */}
-        <div style={{ padding: 16, fontFamily: 'sans-serif' }}>
-          <nav style={{ marginBottom: 24 }}>
-            <a style={{ marginRight: 16, cursor: 'pointer' }}
+        <div style={{ padding:16,fontFamily:'sans-serif' }}>
+          {/* nav */}
+          <nav style={{ marginBottom:24 }}>
+            <a style={{ marginRight:16,cursor:'pointer' }}
                onClick={() => setView('home')}>Home</a>
-            <a style={{ marginRight: 16, cursor: 'pointer' }}
+            <a style={{ marginRight:16,cursor:'pointer' }}
                onClick={() => setView('library')}>Library</a>
-            <a style={{ cursor: 'pointer' }}
+            <a style={{ cursor:'pointer' }}
                onClick={() => setView('market')}>Marketplace</a>
           </nav>
 
+          {/* routes */}
           {view === 'home'    && <Home />}
           {view === 'library' && (
             <Library onRun={runAuto} onEdit={openEditor} />
