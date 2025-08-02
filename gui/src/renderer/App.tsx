@@ -1,5 +1,5 @@
 /* ───────────────────────── renderer/App.tsx
-   Routing + CLI banner + editor-window launcher (hash payload)
+   Routing + CLI banner + editor-window launcher
 ────────────────────────────────────────────────────────── */
 import React, { useEffect, useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -13,10 +13,9 @@ import { TemplateJSON } from '../services/templates'
 const qc   = new QueryClient()
 type View  = 'home' | 'library' | 'market'
 
-/* ---------- helper: open editor window ------------------- */
+/* ---------- helper: open editor popup ------------------- */
 function openEditor (tpl: TemplateJSON | null) {
-  /* EditorWindow expects templ JSON in location.hash (or blank) */
-  const hash = tpl ? `#${encodeURIComponent(JSON.stringify(tpl))}` : ''
+  const hash = tpl ? '#' + encodeURIComponent(JSON.stringify(tpl)) : ''
   const url  = `${window.location.origin}/#/editor${hash}`
   window.open(
     url,
@@ -25,11 +24,10 @@ function openEditor (tpl: TemplateJSON | null) {
   )
 }
 
-/* ---------- main component ------------------------------- */
 export default function App () {
   const [view, setView] = useState<View>('home')
 
-  /* CLI banner state */
+  /* CLI banner */
   const [running, setRunning] = useState(false)
   useEffect(() => {
     const offStart = window.electron.onCliStarted(() => setRunning(true))
@@ -66,7 +64,7 @@ export default function App () {
           {view === 'library' && (
             <Library
               onRun ={runAutomation}
-              onEdit={openEditor}      {/* ← fixed launcher */}
+              onEdit={openEditor}   /* opens popup */
             />
           )}
           {view === 'market'  && <Marketplace />}
