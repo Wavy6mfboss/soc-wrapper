@@ -1,5 +1,5 @@
 /* ───────────────────────── gui/src/services/marketplace.ts
-   Public-template helpers – live rating aggregates + local-copy helper
+   Public-template helpers – publish, download-copy & live stars
 ────────────────────────────────────────────────────────────────── */
 import { supabase, type TemplateJSON } from './templates'
 
@@ -31,7 +31,7 @@ export type MarketplaceTemplate = TemplateJSON & {
   ratingCount: number
 }
 
-/* ---------- fetch list ------------------------------------------------ */
+/* ---------- list ------------------------------------------------------ */
 export async function fetchPublicTemplates (
   sort: 'new' | 'top' = 'new',
 ): Promise<MarketplaceTemplate[]> {
@@ -62,21 +62,31 @@ export async function fetchPublicTemplates (
   return enriched
 }
 
-/* ---------- publish a private copy to My Library --------------------- */
-/**
- * Download / buy → insert a private clone.
- * • owner_id = current user
- * • source_id = original template id
- * • is_public = false
- * Returns `{ error }` so callers can check.
- */
+/* ---------- helper: publish *public* automation ----------------------- */
+export async function publishTemplate (
+  tpl: TemplateJSON,
+): Promise<{ error: Error | null }> {
+  const now = new Date().toISOString()
+  const row = {
+    ...tpl,
+    id         : undefined,          // let Supabase generate PK
+    is_public  : true,
+    price_cents: tpl.price_cents ?? 0,
+    created_at : now,
+    updated_at : now,
+  }
+  const { error } = await supabase.from('templates').insert([row])
+  return { error }
+}
+
+/* ---------- helper: download / buy → private copy --------------------- */
 export async function publishLocalCopy (
-  original   : TemplateJSON,
-  ownerId    : string,
+  original : TemplateJSON,
+  ownerId  : string,
 ): Promise<{ error: Error | null }> {
   const clone = {
     ...original,
-    id        : undefined,            // let Supabase generate new PK
+    id        : undefined,
     owner_id  : ownerId,
     source_id : original.id,
     is_public : false,
