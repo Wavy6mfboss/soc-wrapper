@@ -3,23 +3,23 @@
 ────────────────────────────────────────────────────────── */
 const { contextBridge, ipcRenderer } = require('electron')
 
-/* helper: subscribe once, return unsub */
+/* one-shot subscribe helper (returns unsubscribe) */
 const sub = (ch, cb) => {
   const h = (_e, ...a) => cb(...a)
   ipcRenderer.on(ch, h)
   return () => ipcRenderer.removeListener(ch, h)
 }
 
-/* minimal, safe “ipcRenderer” façade */
+/* safe, readonly façade that mirrors the real ipcRenderer */
 const safeIpc = {
   on            : (c, fn) => ipcRenderer.on(c, fn),
   once          : (c, fn) => ipcRenderer.once(c, fn),
+  off           : (c, fn) => ipcRenderer.removeListener(c, fn),  // ← NEW alias
   removeListener: (c, fn) => ipcRenderer.removeListener(c, fn),
   send          : (c, ...a) => ipcRenderer.send(c, ...a),
   invoke        : (c, ...a) => ipcRenderer.invoke(c, ...a),
 }
 
-/* expose API to all renderer windows */
 contextBridge.exposeInMainWorld('electron', {
   /* one-shot actions */
   runCli       : (args) => ipcRenderer.invoke('run-cli', args),
@@ -28,11 +28,11 @@ contextBridge.exposeInMainWorld('electron', {
   openEditor   : (tpl)  => ipcRenderer.invoke('open-editor', tpl),
   templateSaved: ()     => ipcRenderer.send  ('template-saved'),
 
-  /* realtime streams */
+  /* realtime events */
   onCliStarted   : (cb) => sub('cli-started',    cb),
   onCliEnded     : (cb) => sub('cli-ended',      cb),
   onTemplateSaved: (cb) => sub('template-saved', cb),
 
-  /* drop-in replacement for legacy calls */
+  /* expose safe wrapper for legacy calls */
   ipcRenderer: safeIpc,
 })
