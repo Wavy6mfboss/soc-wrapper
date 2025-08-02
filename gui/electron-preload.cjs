@@ -1,42 +1,34 @@
-/* ───────────────────────── gui/electron-preload.cjs
-   Bridge – full API + _EDITOR_DATA injection
-────────────────────────────────────────────────────────── */
+/* ───────────────────────── electron-preload.cjs
+   Secure bridge: renderer  ↔  main process
+───────────────────────────────────────────────────────────────── */
 const { contextBridge, ipcRenderer } = require('electron')
 
-/* one-shot listener helper */
-const sub = (ch, cb) => {
-  const h = (_e, ...a) => cb(...a)
-  ipcRenderer.on(ch, h)
-  return () => ipcRenderer.removeListener(ch, h)
+/* ---------- helper: subscribe once, return unsub -------------- */
+const sub = (channel, cb) => {
+  const handler = (_e, ...a) => cb(...a)
+  ipcRenderer.on(channel, handler)
+  return () => ipcRenderer.removeListener(channel, handler)
 }
 
+/* ---------- minimal, safe wrapper ----------------------------- */
+const safeIpc = {
+  on    : (ch, fn) => ipcRenderer.on(ch, fn),
+  off   : (ch, fn) => ipcRenderer.removeListener(ch, fn),
+  invoke: (ch, ...a) => ipcRenderer.invoke(ch, ...a),
+}
+
+/* ---------- API exposed to renderer windows ------------------- */
 contextBridge.exposeInMainWorld('electron', {
-  /* CLI controls */
-  runCli   : args => ipcRenderer.invoke('run-cli', args),
-  stopCli  : ()   => ipcRenderer.invoke('stop-cli'),
-  getConfig: ()   => ipcRenderer.invoke('getConfig'),
+  /* one-shot actions */
+  runCli        : (args) => ipcRenderer.invoke('run-cli', args),
+  stopCli       : ()     => ipcRenderer.invoke('stop-cli'),
+  getConfig     : ()     => ipcRenderer.invoke('getConfig'),
+  templateSaved : ()     => ipcRenderer.send  ('template-saved'),   // NEW
 
-  /* CLI lifecycle hooks */
-  onCliStarted: cb => sub('cli-started', cb),
-  onCliEnded  : cb => sub('cli-ended',  cb),
-  onCliExited : cb => sub('cli-ended',  cb),
+  /* realtime events – each returns an “unsub” */
+  onCliStarted   : (cb) => sub('cli-started',    cb),
+  onCliEnded     : (cb) => sub('cli-ended',      cb),
+  onTemplateSaved: (cb) => sub('template-saved', cb),               // NEW
 
-  /* editor helpers */
-  openEditor : tpl => ipcRenderer.invoke('open-editor', tpl),
-  focusWindow: ()  => ipcRenderer.invoke('focus-window'),
-
-  /* raw access */
-  ipcRenderer: {
-    on    : (...a) => ipcRenderer.on(...a),
-    off   : (...a) => ipcRenderer.removeListener(...a),
-    invoke: (...a) => ipcRenderer.invoke(...a),
-  },
+  ipcRenderer : safeIpc,
 })
-
-/* Inject template JSON for the modal editor (if present) */
-try {
-  const idx = process.argv.findIndex(a => a === '--editor')
-  if (idx !== -1 && process.argv[idx + 1]) {
-    contextBridge.exposeInMainWorld('_EDITOR_DATA', process.argv[idx + 1])
-  }
-} catch {/* ignore */}

@@ -1,49 +1,60 @@
-/* ───────────────────────── gui/electron-main.cjs */
+/* ───────────────────────── electron-main.cjs
+   Main-process bootstrap + forward “template-saved”
+───────────────────────────────────────────────────────────────── */
 const { app, BrowserWindow, ipcMain } = require('electron')
-const path = require('node:path')
+const path   = require('node:path')
+const { spawn } = require('node:child_process')
 
-let mainWindow
-function createMain () {
+/* ---------- CLI runner ---------------------------------------- */
+let child = null
+function launchCli (args = []) {
+  if (child) return
+  const exe = path.join(__dirname, 'dist', 'operate_runner.exe')
+  child = spawn(exe, args, { stdio: 'inherit' })
+  mainWindow.webContents.send('cli-started')
+  child.on('exit', (code) => {
+    mainWindow.webContents.send('cli-ended', code)
+    child = null
+  })
+}
+function killCli () {
+  if (child) try { child.kill() } catch (_) {}
+}
+
+/* ---------- window -------------------------------------------- */
+let mainWindow = null
+function createWindow () {
   mainWindow = new BrowserWindow({
     width: 1024, height: 768,
     webPreferences: {
       preload: path.join(__dirname, 'electron-preload.cjs'),
-      contextIsolation: true, nodeIntegration: false,
+      contextIsolation: true,
+      nodeIntegration : false,
     },
   })
-  const url = process.env.VITE_DEV_SERVER_URL ||
-              `file://${path.join(__dirname, '..', 'dist', 'index.html')}`
-  mainWindow.loadURL(url)
-  if (process.env.VITE_DEV_SERVER_URL) mainWindow.webContents.openDevTools()
+  if (process.env.VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
+    mainWindow.webContents.openDevTools()
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
+  }
 }
-app.whenReady().then(createMain)
+app.whenReady().then(createWindow)
 
-/* ---------- modal editor window -------------------------------------- */
-let editorWin = null
-ipcMain.handle('open-editor', (_e, tplJson) => {
-  if (editorWin) { editorWin.focus(); return }
+/* ---------- IPC handlers -------------------------------------- */
+ipcMain.handle('run-cli',  (_e, args) => launchCli(args))
+ipcMain.handle('stop-cli', ()         => killCli())
+ipcMain.handle('getConfig',()         => ({
+  userData: app.getPath('userData'),
+  env:      process.env.NODE_ENV ?? 'production',
+}))
 
-  editorWin = new BrowserWindow({
-    width: 640, height: 720, parent: mainWindow, modal: true,
-    webPreferences: {
-      preload: path.join(__dirname, 'electron-preload.cjs'),
-      contextIsolation: true, nodeIntegration: false,
-      additionalArguments: ['--editor', JSON.stringify(tplJson)],
-    },
-  })
-
-  const base = process.env.VITE_DEV_SERVER_URL
-    || `file://${path.join(__dirname, '..', 'dist', 'index.html')}`
-
-  editorWin.loadURL(`${base}#/editor`)        // ← load the editor route
-  editorWin.on('closed', () => { editorWin = null })
+/* forward “template-saved” from editor → renderer -------------- */
+ipcMain.on('template-saved', () => {
+  if (mainWindow) mainWindow.webContents.send('template-saved')
 })
 
-/* ---------- misc IPC -------------------------------------------------- */
-ipcMain.handle('run-cli',      () => {/* omitted for brevity */})
-ipcMain.handle('stop-cli',     () => {/* omitted for brevity */})
-ipcMain.handle('focus-window', () => { mainWindow?.focus(); mainWindow?.webContents.focus() })
-ipcMain.handle('getConfig',    () => ({ userData: app.getPath('userData'),
-                                        env:      process.env.NODE_ENV ?? 'production' }))
-
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
+/* graceful quit */
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit()
+})
